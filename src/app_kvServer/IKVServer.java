@@ -72,11 +72,6 @@ public interface IKVServer {
     public void clearStorage();
 
     /**
-     * Starts running the server
-     */
-    public void run();
-
-    /**
      * Abruptly stop the server without any additional actions
      * NOTE: this includes performing saving to storage
      */

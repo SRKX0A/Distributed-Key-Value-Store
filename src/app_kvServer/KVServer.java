@@ -1,31 +1,39 @@
 package app_kvServer;
 
-public class KVServer implements IKVServer {
-	/**
-	 * Start KV Server at given port
-	 * @param port given port for storage server to operate
-	 * @param cacheSize specifies how many key-value pairs the server is allowed
-	 *           to keep in-memory
-	 * @param strategy specifies the cache replacement strategy in case the cache
-	 *           is full and there is a GET- or PUT-request on a key that is
-	 *           currently not contained in the cache. Options are "FIFO", "LRU",
-	 *           and "LFU".
-	 */
-	public KVServer(int port, int cacheSize, String strategy) {
-		// TODO Auto-generated method stub
-	}
-	
-	@Override
-	public int getPort(){
-		// TODO Auto-generated method stub
-		return -1;
-	}
+public class KVServer extends Thread implements IKVServer {
 
-	@Override
+    private static Logger logger = Logger.getRootLogger();
+    private ServerSocket socket;
+
+    int port;
+    int cacheSize;
+    String strategy;
+
+    /**
+	* Start KV Server at given port
+	* @param port given port for storage server to operate
+	* @param cacheSize specifies how many key-value pairs the server is allowed
+	*           to keep in-memory
+	* @param strategy specifies the cache replacement strategy in case the cache
+	*           is full and there is a GET- or PUT-request on a key that is
+	*           currently not contained in the cache. Options are "FIFO", "LRU",
+	*           and "LFU".
+	*/
+    public KVServer(int port, int cacheSize, String strategy) {
+	this.port = port;
+	this.cacheSize = cacheSize;
+	this.strategy = strategy;
+    }
+    
+    @Override
+    public int getPort() {
+	return this.port;
+    }
+
+    @Override
     public String getHostname(){
-		// TODO Auto-generated method stub
-		return null;
-	}
+	return this.socket.getInetAddress().getHostName();
+    }
 
 	@Override
     public CacheStrategy getCacheStrategy(){
@@ -72,18 +80,40 @@ public class KVServer implements IKVServer {
 		// TODO Auto-generated method stub
 	}
 
-	@Override
-    public void run(){
-		// TODO Auto-generated method stub
-	}
-
-	@Override
-    public void kill(){
-		// TODO Auto-generated method stub
-	}
+    @Override
+    public void kill() {
+	this.socket.close();
+    }
 
 	@Override
     public void close(){
 		// TODO Auto-generated method stub
 	}
+
+    @Override
+    public void run() {
+
+	logger.info("Starting server...");	
+	try {
+	    this.socket = new ServerSocket(port);
+	    logger.info("Server listening on port: " + this.socket.getLocalPort());
+	} catch (IOException e) {
+	    logger.error("Cannot open server socket: " + e.toString());
+	    return;
+	}
+
+	while (this.online) {
+	    
+	    try {
+		Socket client = this.socket.accept();
+		new Connection(client).start();
+		logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
+	    } catch (IOException e) {
+		logger.error(String.format("Unable to establish connection: %s", e.toString()));
+	    }
+
+	}
+	
+	logger.info("Server stopped...");
+    }
 }
