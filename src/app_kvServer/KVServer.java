@@ -30,6 +30,8 @@ public class KVServer extends Thread implements IKVServer {
 	this.port = port;
 	this.cacheSize = cacheSize;
 	this.strategy = strategy;
+
+	this.online = true;
     }
     
     @Override
@@ -89,17 +91,18 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public void kill() {
+	System.exit(1);
+    }
+
+    @Override
+    public void close() {
 	try {
 	    this.socket.close();
 	} catch (Exception e) {
 	    logger.error(e.toString());
 	}
+	this.online = false;
     }
-
-	@Override
-    public void close(){
-		// TODO Auto-generated method stub
-	}
 
     @Override
     public void run() {
@@ -114,17 +117,17 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	while (this.online) {
-	    
+
 	    try {
 		Socket client = this.socket.accept();
-		new Connection(client, this).start();
+	    new Connection(client, this).start();
 		logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
 	    } catch (IOException e) {
 		logger.error(String.format("Unable to establish connection: %s", e.toString()));
 	    }
 
 	}
-	
+
 	logger.info("Server stopped...");
     }
 }

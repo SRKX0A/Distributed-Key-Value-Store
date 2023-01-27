@@ -13,12 +13,12 @@
   <!-- Configuration for client application -->
   <property name="clientjar.file"      value="m1-client.jar"/>
   <property name="clientmanifest.file" value="CLIENT_MANIFEST.MF"/>
-  <property name="clientmain.class" value="app_kvClient.KVClient"/>
+  <property name="clientmain.class" value="app_kvClient.App_KVClient"/>
 
   <!-- Configuration for server application -->
   <property name="serverjar.file"      value="m1-server.jar"/>
   <property name="servermanifest.file" value="SERVER_MANIFEST.MF"/>
-  <property name="servermain.class" value="app_kvServer.KVServer"/>
+  <property name="servermain.class" value="app_kvServer.App_KVServer"/>
 
   <!-- path to libraries-->
   <path id="external.jars">

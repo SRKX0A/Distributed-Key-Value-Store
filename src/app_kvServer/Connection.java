@@ -42,6 +42,7 @@ public class Connection extends Thread {
 		ProtocolMessage request = (ProtocolMessage) ois.readObject();
 		ois.skipBytes(2);
 
+		this.logger.info("Received protocol message: status = " + request.getStatus() + ", key = " + request.getKey() + ", value = " + request.getValue()); 
 		// TODO: handle incoming pm
 
 		//placeholder reply message
@@ -54,10 +55,12 @@ public class Connection extends Thread {
 		oos.write('\r');
 		oos.write('\n');
 		oos.flush();
-		oos.close();
+
+		this.logger.info("Sent protocol message: Put reply with status = " + reply.getStatus());
 
 	    } catch(Exception e) {
 		logger.error(e.toString());
+		return;
 	    }
 
 	}

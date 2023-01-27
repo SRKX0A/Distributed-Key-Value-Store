@@ -41,7 +41,7 @@ public class KVStore implements KVCommInterface {
 	    try {
 		this.socket.close();
 	    } catch (Exception e) {
-		logger.error(e.toString());
+		this.logger.error(e.toString());
 	    }
 	}
 
@@ -54,12 +54,14 @@ public class KVStore implements KVCommInterface {
 	    oos.write('\r');
 	    oos.write('\n');
 	    oos.flush();
-	    oos.close();
+
+	    this.logger.info("Sent protocol message: Put request with key = " + put_request.getKey() + ", value = " + put_request.getValue()); 
 
 	    ObjectInputStream ois = new ObjectInputStream(this.input);
 	    ProtocolMessage put_reply = (ProtocolMessage) ois.readObject();
 	    ois.skipBytes(2);
-	    ois.close();
+
+	    this.logger.info("Received protocol message: status = " + put_reply.getStatus()); 
 
 	    return put_reply;
 	}
@@ -73,12 +75,10 @@ public class KVStore implements KVCommInterface {
 	    oos.write('\r');
 	    oos.write('\n');
 	    oos.flush();
-	    oos.close();
 
 	    ObjectInputStream ois = new ObjectInputStream(this.input);
 	    ProtocolMessage get_reply = (ProtocolMessage) ois.readObject();
 	    ois.skipBytes(2);
-	    ois.close();
 
 	    return get_reply;
 	}
