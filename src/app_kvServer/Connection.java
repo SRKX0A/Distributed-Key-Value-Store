@@ -1,5 +1,13 @@
 package app_kvServer;
 
+import java.io.*;
+import java.net.*;
+
+import org.apache.log4j.Logger;
+
+import client.ProtocolMessage;
+import shared.messages.KVMessage;
+
 public class Connection extends Thread {
     
     private static Logger logger = Logger.getRootLogger();
@@ -29,10 +37,9 @@ public class Connection extends Thread {
 
 	    try {
 
-		ByteArrayInputStream bis = new ByteArrayInputStream(this.input);
-		ObjectInputStream ois = new ObjectInputStream(bis);
+		ObjectInputStream ois = new ObjectInputStream(this.input);
 
-		ProtocolMessage request = ois.readObject();
+		ProtocolMessage request = (ProtocolMessage) ois.readObject();
 		ois.skipBytes(2);
 
 		// TODO: handle incoming pm
@@ -41,8 +48,7 @@ public class Connection extends Thread {
 
 		ProtocolMessage reply = new ProtocolMessage(KVMessage.StatusType.PUT_SUCCESS, null, null);
 
-		ByteArrayOutputStream bos = new ByteArrayOutputStream(this.output);
-		ObjectOutputStream oos = new ObjectOutputStream(bos);
+		ObjectOutputStream oos = new ObjectOutputStream(this.output);
 
 		oos.writeObject(reply);
 		oos.write('\r');
@@ -50,7 +56,7 @@ public class Connection extends Thread {
 		oos.flush();
 		oos.close();
 
-	    } catch(IOException e) {
+	    } catch(Exception e) {
 		logger.error(e.toString());
 	    }
 

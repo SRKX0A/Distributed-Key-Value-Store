@@ -1,5 +1,10 @@
 package app_kvServer;
 
+import java.io.*;
+import java.net.*;
+
+import org.apache.log4j.Logger;
+
 public class KVServer extends Thread implements IKVServer {
 
     private static Logger logger = Logger.getRootLogger();
@@ -8,6 +13,8 @@ public class KVServer extends Thread implements IKVServer {
     int port;
     int cacheSize;
     String strategy;
+
+    boolean online;
 
     /**
 	* Start KV Server at given port
@@ -82,7 +89,11 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public void kill() {
-	this.socket.close();
+	try {
+	    this.socket.close();
+	} catch (Exception e) {
+	    logger.error(e.toString());
+	}
     }
 
 	@Override

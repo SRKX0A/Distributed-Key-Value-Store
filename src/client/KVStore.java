@@ -3,9 +3,13 @@ package client;
 import java.io.*;
 import java.net.Socket;
 
+import org.apache.log4j.Logger;
+
 import shared.messages.KVMessage;
 
 public class KVStore implements KVCommInterface {
+
+	private static Logger logger = Logger.getRootLogger();
 
 	final String address;
 	final int port;
@@ -34,24 +38,26 @@ public class KVStore implements KVCommInterface {
 
 	@Override
 	public void disconnect() {
-	    this.socket.close();
+	    try {
+		this.socket.close();
+	    } catch (Exception e) {
+		logger.error(e.toString());
+	    }
 	}
 
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
 	    ProtocolMessage put_request = new ProtocolMessage(KVMessage.StatusType.PUT, key, value); 
 
-	    ByteArrayOutputStream bos = new ByteArrayOutputStream(this.socket.output);	
-	    ObjectOutputStream oos = new ObjectOutputStream(bos);
+	    ObjectOutputStream oos = new ObjectOutputStream(this.output);
 	    oos.writeObject(put_request);
 	    oos.write('\r');
 	    oos.write('\n');
 	    oos.flush();
 	    oos.close();
 
-	    ByteArrayInputStream bis = new ByteArrayInputStream(this.socket.input);
-	    ObjectInputStream ois = new ObjectInputStream(bis);
-	    ProtocolMessage put_reply = ois.readObject();
+	    ObjectInputStream ois = new ObjectInputStream(this.input);
+	    ProtocolMessage put_reply = (ProtocolMessage) ois.readObject();
 	    ois.skipBytes(2);
 	    ois.close();
 
@@ -62,17 +68,15 @@ public class KVStore implements KVCommInterface {
 	public KVMessage get(String key) throws Exception {
 	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
 
-	    ByteArrayOutputStream bos = new ByteArrayOutputStream(this.socket.output);	
-	    ObjectOutputStream oos = new ObjectOutputStream(bos);
+	    ObjectOutputStream oos = new ObjectOutputStream(this.output);
 	    oos.writeObject(get_request);
 	    oos.write('\r');
 	    oos.write('\n');
 	    oos.flush();
 	    oos.close();
 
-	    ByteArrayInputStream bis = new ByteArrayInputStream(this.socket.input);
-	    ObjectInputStream ois = new ObjectInputStream(bis);
-	    ProtocolMessage get_reply = ois.readObject();
+	    ObjectInputStream ois = new ObjectInputStream(this.input);
+	    ProtocolMessage get_reply = (ProtocolMessage) ois.readObject();
 	    ois.skipBytes(2);
 	    ois.close();
 

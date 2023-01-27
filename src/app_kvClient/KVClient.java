@@ -1,9 +1,11 @@
 package app_kvClient;
 
-import org.apache.log4j.Logger;
 import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 
 import client.KVCommInterface;
+import client.KVStore;
+import shared.messages.KVMessage;
 
 public class KVClient implements IKVClient {
 
@@ -48,20 +50,19 @@ public class KVClient implements IKVClient {
     }
 
     public void logLevel(Level level) throws Exception {
-	
-	switch (level) {
-	    case Level.ALL:
-	    case Level.INFO:
-	    case Level.WARN:
-	    case Level.DEBUG:
-	    case Level.ERROR:
-	    case Level.FATAL:
-	    case Level.OFF:
-		this.logger.setLevel(level);
-		break;
-	    default:
-		throw new IllegalArgumentException(
-		"Logger level must be one of ALL|INFO|WARN|DEBUG|ERROR|FATAL|OFF.");
+
+	if (level.equals(Level.ALL) ||
+	    level.equals(Level.INFO) ||
+	    level.equals(Level.WARN) ||
+	    level.equals(Level.DEBUG) ||
+	    level.equals(Level.ERROR) ||
+	    level.equals(Level.FATAL) ||
+	    level.equals(Level.OFF)
+	    ) {
+	    this.logger.setLevel(level);
+	} else {
+	    throw new IllegalArgumentException(
+	    "Logger level must be one of ALL|INFO|WARN|DEBUG|ERROR|FATAL|OFF.");
 	}
 
     }
