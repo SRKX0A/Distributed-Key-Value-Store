@@ -106,7 +106,7 @@ public class KVServer extends Thread implements IKVServer {
 	    
 	    try {
 		Socket client = this.socket.accept();
-		new Connection(client).start();
+		new Connection(client, this).start();
 		logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
 	    } catch (IOException e) {
 		logger.error(String.format("Unable to establish connection: %s", e.toString()));

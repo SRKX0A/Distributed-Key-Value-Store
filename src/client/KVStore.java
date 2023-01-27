@@ -41,13 +41,18 @@ public class KVStore implements KVCommInterface {
 	public KVMessage put(String key, String value) throws Exception {
 	    ProtocolMessage put_request = new ProtocolMessage(KVMessage.StatusType.PUT, key, value); 
 
-	    ObjectOutputStream oos = new ObjectOutputStream(this.socket.output);
+	    ByteArrayOutputStream bos = new ByteArrayOutputStream(this.socket.output);	
+	    ObjectOutputStream oos = new ObjectOutputStream(bos);
 	    oos.writeObject(put_request);
+	    oos.write('\r');
+	    oos.write('\n');
 	    oos.flush();
 	    oos.close();
 
-	    ObjectInputStream ois = new ObjectInputStream(this.socket.input);
+	    ByteArrayInputStream bis = new ByteArrayInputStream(this.socket.input);
+	    ObjectInputStream ois = new ObjectInputStream(bis);
 	    ProtocolMessage put_reply = ois.readObject();
+	    ois.skipBytes(2);
 	    ois.close();
 
 	    return put_reply;
@@ -57,13 +62,18 @@ public class KVStore implements KVCommInterface {
 	public KVMessage get(String key) throws Exception {
 	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
 
-	    ObjectOutputStream oos = new ObjectOutputStream(this.socket.output);
+	    ByteArrayOutputStream bos = new ByteArrayOutputStream(this.socket.output);	
+	    ObjectOutputStream oos = new ObjectOutputStream(bos);
 	    oos.writeObject(get_request);
+	    oos.write('\r');
+	    oos.write('\n');
 	    oos.flush();
 	    oos.close();
 
-	    ObjectInputStream ois = new ObjectInputStream(this.socket.input);
+	    ByteArrayInputStream bis = new ByteArrayInputStream(this.socket.input);
+	    ObjectInputStream ois = new ObjectInputStream(bis);
 	    ProtocolMessage get_reply = ois.readObject();
+	    ois.skipBytes(2);
 	    ois.close();
 
 	    return get_reply;
