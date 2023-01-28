@@ -1,6 +1,6 @@
 package app_kvServer;
 
-import java.io.IOException;
+import java.io.*;
 
 import org.apache.log4j.Level;
 
@@ -16,11 +16,17 @@ public class App_KVServer {
                 System.out.println("Error! Invalid number of arguments!");
                 System.out.println("Usage: Server <port>!");
             } else {
+
+		File store_dir = new File("data/store");
+		store_dir.mkdirs();
+
+		File wal = new File("data/wal.txt");
+		wal.createNewFile();
+
                 int port = Integer.parseInt(args[0]);
-                new KVServer(port, 100, "LRU").start();
+                new KVServer(port, 10, "LRU").start();
             }
         } catch (IOException e) {
-            System.out.println("Error! Unable to initialize logger!");
             e.printStackTrace();
             System.exit(1);
         } catch (NumberFormatException nfe) {

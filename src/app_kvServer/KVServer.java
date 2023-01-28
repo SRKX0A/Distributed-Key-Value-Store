@@ -2,6 +2,13 @@ package app_kvServer;
 
 import java.io.*;
 import java.net.*;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Calendar;
+import java.util.Scanner;
+import java.text.SimpleDateFormat;
 
 import org.apache.log4j.Logger;
 
@@ -12,11 +19,14 @@ public class KVServer extends Thread implements IKVServer {
     private static Logger logger = Logger.getRootLogger();
     private ServerSocket socket;
 
-    int port;
-    int cacheSize;
-    String strategy;
+    private int port;
+    private int cacheSize;
+    private String strategy;
 
-    boolean online;
+    private boolean online;
+
+    private File wal;
+    private TreeMap<String, String> memtable;
 
     /**
 	* Start KV Server at given port
@@ -34,6 +44,10 @@ public class KVServer extends Thread implements IKVServer {
 	this.strategy = strategy;
 
 	this.online = true;
+
+	this.wal = new File("data/wal.txt");
+	this.memtable = new TreeMap<String, String>();
+
     }
     
     @Override
@@ -52,45 +66,122 @@ public class KVServer extends Thread implements IKVServer {
 		return IKVServer.CacheStrategy.None;
 	}
 
-	@Override
+    @Override
     public int getCacheSize(){
-		// TODO Auto-generated method stub
-		return -1;
+	return this.cacheSize;
+    }
+
+    @Override
+    public boolean inStorage(String key) throws Exception {
+
+	File store_dir = new File("data/store");
+
+	File[] store_files = store_dir.listFiles();
+
+	Arrays.sort(store_files, new Comparator<File>() {
+	    public int compare(File f1, File f2) {
+		return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
+	    }
+	});
+
+	for (File file: store_files) {
+	    Scanner scanner = new Scanner(file);
+	    scanner.useDelimiter("\r\n");
+	    while (scanner.hasNext()) {
+		String test_key = scanner.next();
+		String test_value = scanner.next();
+		if (key.equals(test_key) && test_value != null) {
+		    return true;
+		}
+	    }
+	    scanner.close();
 	}
 
-	@Override
-    public boolean inStorage(String key){
-		// TODO Auto-generated method stub
-		return false;
-	}
+	return false;
+	
+    }
 
-	@Override
+    @Override
     public boolean inCache(String key){
-		// TODO Auto-generated method stub
-		return false;
+	return this.memtable.containsKey(key);
+    }
+
+    @Override
+    public String getKV(String key) throws Exception {
+
+	File store_dir = new File("data/store");
+
+	File[] store_files = store_dir.listFiles();
+
+	Arrays.sort(store_files, new Comparator<File>() {
+	    public int compare(File f1, File f2) {
+		return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
+	    }
+	});
+
+	for (File file: store_files) {
+	    Scanner scanner = new Scanner(file);
+	    scanner.useDelimiter("\r\n");
+	    while (scanner.hasNext()) {
+		String test_key = scanner.next();
+		String test_value = scanner.next();
+		if (key.equals(test_key)) {
+		    return test_value;
+		}
+	    }
+	    scanner.close();
 	}
 
-	@Override
-    public String getKV(String key) throws Exception{
-		// TODO Auto-generated method stub
-		return "";
+	return null;
+
+    }
+
+    @Override
+    public StatusType putKV(String key, String value) throws Exception {
+
+	BufferedWriter walWriter = new BufferedWriter(new FileWriter(this.wal, true));
+	walWriter.write(String.format("%s\r\n%s\r\n", key, value));
+	walWriter.close();
+	
+	String prev_value = this.memtable.put(key, value);
+
+	if (this.memtable.size() >= this.cacheSize) {
+
+	    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
+
+	    File dumpedFile = new File("data/store", timestamp + ".txt"); 
+	    dumpedFile.createNewFile();
+
+	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+	    for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
+		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
+	    }
+
+	    dumpedWriter.close();
+
+	    new FileOutputStream(this.wal).close();
+
+	    this.memtable.clear();
+
 	}
 
-	@Override
-    public StatusType putKV(String key, String value) throws Exception{
-		// TODO Auto-generated method stub
+	if (prev_value == null && !this.inStorage(key)) {
 	    return StatusType.PUT_SUCCESS;
+	} else {
+	    return StatusType.PUT_UPDATE;
 	}
 
-	@Override
+    }
+
+    @Override
     public void clearCache(){
 		// TODO Auto-generated method stub
-	}
+    }
 
-	@Override
+    @Override
     public void clearStorage(){
 		// TODO Auto-generated method stub
-	}
+    }
 
     @Override
     public void kill() {
@@ -123,7 +214,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	    try {
 		Socket client = this.socket.accept();
-	    new Connection(client, this).start();
+		new Connection(client, this).start();
 		logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
 	    } catch (IOException e) {
 		logger.error(String.format("Unable to establish connection: %s", e.toString()));

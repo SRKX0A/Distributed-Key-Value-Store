@@ -20,8 +20,6 @@ public class Connection extends Thread {
     private InputStream input;
     private OutputStream output;
 
-    private boolean isOpen;
-
     public Connection(Socket socket, KVServer kvServer) throws IOException {
 	this.kvServer = kvServer;
 
@@ -29,12 +27,11 @@ public class Connection extends Thread {
 	this.input = socket.getInputStream();
 	this.output = socket.getOutputStream();
 
-	this.isOpen = true;
     }
 
     public void run() {
 
-	while (this.isOpen) {
+	while (true) {
 
 	    try {
 
@@ -46,7 +43,7 @@ public class Connection extends Thread {
 			this.sendMessage(response_status, null);
 		    } catch (Exception e) {
 
-			this.logger.error(e.toString());
+			this.logger.error("Failure in handling PUT request: " + e.toString());
 
 			if (request.getValue() == null) {
 			    this.sendMessage(StatusType.DELETE_ERROR, null);
@@ -68,16 +65,26 @@ public class Connection extends Thread {
 			}
 		    	
 		    } catch (Exception e) {
-			this.logger.error(e.toString());
+			this.logger.error("Failure to handle GET request: " + e.toString());
 			this.sendMessage(StatusType.GET_ERROR, null);
 		    }
 
 		}
 
 	    } catch(Exception e) {
-		this.logger.error(e.toString());
+		this.logger.error("Client connection failure: " + e.toString());
+
+		try {
+		    this.input.close();
+		    this.output.close();
+		    this.socket.close();
+		} catch (IOException ioe) {
+		    this.logger.error("Failed to gracefully close connection: " + ioe.toString()); 
+		}
+
 		return;
-	    }
+
+	    } 
 
 	}
 

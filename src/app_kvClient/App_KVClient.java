@@ -1,6 +1,7 @@
 package app_kvClient;
 
 import java.io.*;
+import java.util.Scanner;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -23,12 +24,15 @@ public class App_KVClient extends Thread {
 	
 	try {
 	    this.client.newConnection("127.0.0.1", 50000);
+	    Scanner s = new Scanner(System.in);
+	    s.useDelimiter("\n");
 	    while(this.running) {
-		this.client.put("test_key", "test_value");
-		Thread.sleep(4000);
+		String key = s.next();	
+		String value = s.next();
+		this.client.put(key, value);
 	    }
 	} catch (Exception e) {
-	    logger.error(e.toString());
+	    logger.error("Connection error: " + e.toString());
 	}
 
     }
