@@ -7,6 +7,7 @@ import org.apache.log4j.Logger;
 
 import client.ProtocolMessage;
 import shared.messages.KVMessage;
+import shared.messages.KVMessage.StatusType;
 
 public class Connection extends Thread {
     
@@ -37,33 +38,74 @@ public class Connection extends Thread {
 
 	    try {
 
-		ObjectInputStream ois = new ObjectInputStream(this.input);
+		ProtocolMessage request = this.receiveMessage();
 
-		ProtocolMessage request = (ProtocolMessage) ois.readObject();
-		ois.skipBytes(2);
+		if (request.getStatus() == StatusType.PUT) {
+		    try {
+			StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
+			this.sendMessage(response_status, null);
+		    } catch (Exception e) {
 
-		this.logger.info("Received protocol message: status = " + request.getStatus() + ", key = " + request.getKey() + ", value = " + request.getValue()); 
-		// TODO: handle incoming pm
+			this.logger.error(e.toString());
 
-		//placeholder reply message
+			if (request.getValue() == null) {
+			    this.sendMessage(StatusType.DELETE_ERROR, null);
+			} else {
+			    this.sendMessage(StatusType.PUT_ERROR, null);
+			}
 
-		ProtocolMessage reply = new ProtocolMessage(KVMessage.StatusType.PUT_SUCCESS, null, null);
+		    }
+		} else {
+		    
+		    try {
 
-		ObjectOutputStream oos = new ObjectOutputStream(this.output);
+			String value = this.kvServer.getKV(request.getKey());
 
-		oos.writeObject(reply);
-		oos.write('\r');
-		oos.write('\n');
-		oos.flush();
+			if (value == null) {
+			    this.sendMessage(StatusType.GET_ERROR, null);
+			} else {
+			    this.sendMessage(StatusType.GET_SUCCESS, value);
+			}
+		    	
+		    } catch (Exception e) {
+			this.logger.error(e.toString());
+			this.sendMessage(StatusType.GET_ERROR, null);
+		    }
 
-		this.logger.info("Sent protocol message: Put reply with status = " + reply.getStatus());
+		}
 
 	    } catch(Exception e) {
-		logger.error(e.toString());
+		this.logger.error(e.toString());
 		return;
 	    }
 
 	}
 
+    }
+
+    private ProtocolMessage receiveMessage() throws ClassNotFoundException, IOException {
+	ObjectInputStream ois = new ObjectInputStream(this.input);
+
+	ProtocolMessage request = (ProtocolMessage) ois.readObject();
+	ois.skipBytes(2);
+
+
+	this.logger.info("Received protocol message: status = " + request.getStatus() + ", key = " + request.getKey() + ", value = " + request.getValue()); 
+
+	return request;
+    }
+
+    private void sendMessage(StatusType status, String value) throws IOException {
+	
+	ProtocolMessage response = new ProtocolMessage(status, null, value);
+
+	ObjectOutputStream oos = new ObjectOutputStream(this.output);
+
+	oos.writeObject(response);
+	oos.write('\r');
+	oos.write('\n');
+	oos.flush();
+
+	this.logger.info("Sent protocol message: Put response with status = " + response.getStatus());
     }
 }

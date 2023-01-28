@@ -5,6 +5,8 @@ import java.net.*;
 
 import org.apache.log4j.Logger;
 
+import shared.messages.KVMessage.StatusType;
+
 public class KVServer extends Thread implements IKVServer {
 
     private static Logger logger = Logger.getRootLogger();
@@ -75,8 +77,9 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	@Override
-    public void putKV(String key, String value) throws Exception{
+    public StatusType putKV(String key, String value) throws Exception{
 		// TODO Auto-generated method stub
+	    return StatusType.PUT_SUCCESS;
 	}
 
 	@Override
