@@ -38,7 +38,7 @@ public class KVServer extends Thread implements IKVServer {
 	*           currently not contained in the cache. Options are "FIFO", "LRU",
 	*           and "LFU".
 	*/
-    public KVServer(int port, int cacheSize, String strategy) {
+    public KVServer(int port, int cacheSize, String strategy) throws IOException {
 	this.port = port;
 	this.cacheSize = cacheSize;
 	this.strategy = strategy;
@@ -48,8 +48,18 @@ public class KVServer extends Thread implements IKVServer {
 	this.wal = new File("data/wal.txt");
 	this.memtable = new TreeMap<String, String>();
 
+	Scanner scanner = new Scanner(this.wal);
+	scanner.useDelimiter("\r\n");
+	while (scanner.hasNext()) {
+	    String test_key = scanner.next();
+	    String test_value = scanner.next();
+	    this.memtable.put(test_key, (test_value.length() != 0) ? test_value : null);
+	}
+	scanner.close();
+
+
     }
-    
+
     @Override
     public int getPort() {
 	return this.port;
@@ -150,7 +160,7 @@ public class KVServer extends Thread implements IKVServer {
     }
 
     @Override
-    public StatusType putKV(String key, String value) throws Exception {
+    public synchronized StatusType putKV(String key, String value) throws Exception {
 
 	BufferedWriter walWriter = new BufferedWriter(new FileWriter(this.wal, true));
 	walWriter.write(String.format("%s\r\n%s\r\n", key, value));
