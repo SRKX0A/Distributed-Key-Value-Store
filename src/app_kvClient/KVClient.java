@@ -31,7 +31,7 @@ public class KVClient implements IKVClient {
 
 	if (key.getBytes().length > 20) {
 	    throw new IllegalArgumentException("Key length must be less than 20 bytes.");
-	} else if (value.getBytes().length > 120*1024) {
+	} else if (value != null && value.getBytes().length > 120*1024) {
 	    throw new IllegalArgumentException("Value length must be less than 120 kilobytes.");
 	} else {
 	    return this.store.put(key, value);

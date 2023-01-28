@@ -29,7 +29,15 @@ public class App_KVClient extends Thread {
 	    while(this.running) {
 		String key = s.next();	
 		String value = s.next();
-		this.client.put(key, value);
+
+		if (value.equals("g")) {
+		    this.client.get(key);
+		} else if (value.equals("d")) {
+		    this.client.put(key, null);
+		} else {
+		    this.client.put(key, value);
+		}
+
 	    }
 	} catch (Exception e) {
 	    logger.error("Connection error: " + e.toString());

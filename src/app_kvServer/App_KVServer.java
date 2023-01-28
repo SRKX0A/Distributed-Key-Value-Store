@@ -24,7 +24,7 @@ public class App_KVServer {
 		wal.createNewFile();
 
                 int port = Integer.parseInt(args[0]);
-                new KVServer(port, 10, "LRU").start();
+                new KVServer(port, 3, "LRU").start();
             }
         } catch (IOException e) {
             e.printStackTrace();

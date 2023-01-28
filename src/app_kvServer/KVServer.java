@@ -90,8 +90,12 @@ public class KVServer extends Thread implements IKVServer {
 	    while (scanner.hasNext()) {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
-		if (key.equals(test_key) && test_value != null) {
-		    return true;
+		if (key.equals(test_key)) {
+		    if (test_value == null) {
+			return false;
+		    } else {
+			return true;
+		    }
 		}
 	    }
 	    scanner.close();
@@ -109,13 +113,18 @@ public class KVServer extends Thread implements IKVServer {
     @Override
     public String getKV(String key) throws Exception {
 
+	if (this.memtable.containsKey(key)) {
+	    this.logger.info("Got key = " + key + " from cache with value = " + this.memtable.get(key));
+	    return this.memtable.get(key);
+	}
+
 	File store_dir = new File("data/store");
 
 	File[] store_files = store_dir.listFiles();
 
 	Arrays.sort(store_files, new Comparator<File>() {
 	    public int compare(File f1, File f2) {
-		return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
+		return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
 	    }
 	});
 
@@ -126,7 +135,11 @@ public class KVServer extends Thread implements IKVServer {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
-		    return test_value;
+		    if (test_value.length() != 0) {
+			return test_value;
+		    } else {
+			return null;
+		    }
 		}
 	    }
 	    scanner.close();
@@ -143,7 +156,19 @@ public class KVServer extends Thread implements IKVServer {
 	walWriter.write(String.format("%s\r\n%s\r\n", key, value));
 	walWriter.close();
 	
-	String prev_value = this.memtable.put(key, value);
+	boolean presentInCache = this.inCache(key);
+	String previousValue = this.memtable.put(key, value);
+
+	StatusType response = StatusType.PUT_SUCCESS;
+
+	if (previousValue != null || (!presentInCache && this.inStorage(key))) {
+	    response = StatusType.PUT_UPDATE;
+	}
+
+	if (value == null) {
+	    response = StatusType.DELETE_SUCCESS;
+	}
+
 
 	if (this.memtable.size() >= this.cacheSize) {
 
@@ -154,7 +179,8 @@ public class KVServer extends Thread implements IKVServer {
 
 	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
 	    for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
-		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
+		String val = (entry.getValue() == null) ? "" : entry.getValue();
+		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), val));		
 	    }
 
 	    dumpedWriter.close();
@@ -165,11 +191,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	}
 
-	if (prev_value == null && !this.inStorage(key)) {
-	    return StatusType.PUT_SUCCESS;
-	} else {
-	    return StatusType.PUT_UPDATE;
-	}
+	return response;
 
     }
 

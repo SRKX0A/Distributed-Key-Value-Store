@@ -76,9 +76,13 @@ public class KVStore implements KVCommInterface {
 	    oos.write('\n');
 	    oos.flush();
 
+	    this.logger.info("Sent protocol message: GET request with key = " + get_request.getKey() + ", value = " + get_request.getValue()); 
+
 	    ObjectInputStream ois = new ObjectInputStream(this.input);
 	    ProtocolMessage get_reply = (ProtocolMessage) ois.readObject();
 	    ois.skipBytes(2);
+
+	    this.logger.info("Received protocol message: status = " + get_reply.getStatus() + ", value = " + get_reply.getValue()); 
 
 	    return get_reply;
 	}
