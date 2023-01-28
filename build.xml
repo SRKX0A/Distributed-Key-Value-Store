@@ -9,6 +9,7 @@
   <property name="build.dir"     value="bin"/>
   <property name="src.dir"       value="src"/>
   <property name="lib.dir"       value="libs"/>
+  <property name="store.dir"     value="data"/>	
 
   <!-- Configuration for client application -->
   <property name="clientjar.file"      value="m1-client.jar"/>
@@ -49,6 +50,7 @@
 
   <target name="clean">
     <delete dir="${build.dir}"/>
+    <delete dir="${store.dir}"/>
     <delete file="${clientjar.file}" />
     <delete file="${clientmanifest.file}" />
     <delete file="${serverjar.file}" />
