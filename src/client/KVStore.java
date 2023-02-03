@@ -38,7 +38,7 @@ public class KVStore implements KVCommInterface {
 	    this.input = this.socket.getInputStream();
 	    this.output = this.socket.getOutputStream();
 	    this.ois = new ObjectInputStream(this.input);	
-	    this.oos = new ObjectOutputStream(this.input);	
+	    this.oos = new ObjectOutputStream(this.output);	
 	}
 
 	@Override
