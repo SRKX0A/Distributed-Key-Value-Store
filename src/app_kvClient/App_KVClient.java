@@ -57,7 +57,7 @@ public class App_KVClient extends Thread {
 		}
 	}
 
-	public void setLogLevel(String[] commands) {
+	public void setLogLevel(String[] commands) throws Exception {
 		if (commands.length != 2) {
 			System.out.println("Invalid Number of Arguements");
 			return;
@@ -65,32 +65,32 @@ public class App_KVClient extends Thread {
 
 		switch (commands[1].toLowerCase()) {
 			case "all":
-				logger.setLevel(Level.ALL);
-				System.out.println("Logger Level Set To: ALL");
+				this.client.logLevel(Level.ALL);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "debug":
-				logger.setLevel(Level.DEBUG);
-				System.out.println("Logger Level Set To: DEBUG");
+				this.client.logLevel(Level.DEBUG);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "info":
-				logger.setLevel(Level.INFO);
-				System.out.println("Logger Level Set To: INFO");
+				this.client.logLevel(Level.INFO);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "warn":
-				logger.setLevel(Level.WARN);
-				System.out.println("Logger Level Set To: WARN");
+				this.client.logLevel(Level.WARN);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "error":
-				logger.setLevel(Level.ERROR);
-				System.out.println("Logger Level Set To: ERROR");
+				this.client.logLevel(Level.ERROR);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "fatal":
-				logger.setLevel(Level.FATAL);
-				System.out.println("Logger Level Set To: FATAL");
+				this.client.logLevel(Level.FATAL);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			case "off":
-				logger.setLevel(Level.OFF);
-				System.out.println("Logger Level Set To: OFF");
+				this.client.logLevel(Level.OFF);
+				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
 			default:
 				System.out.println("Invalid Logger Level");
