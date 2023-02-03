@@ -236,7 +236,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	logger.info("Starting server...");	
 	try {
-	    this.socket = new ServerSocket(port);
+	    this.socket = new ServerSocket(this.port, 0, InetAddress.getByName(this.address));
 	    logger.info("Server listening on port: " + this.socket.getLocalPort());
 	} catch (IOException e) {
 	    logger.error("Cannot open server socket: " + e.toString());
