@@ -136,7 +136,7 @@ public class Connection extends Thread {
 	System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
 	msgBuf = tmpBuf;
 
-	ProtocolMessage request = new ProtocolMessage(msgBuf);
+	ProtocolMessage request = ProtocolMessage.fromBytesAtServer(msgBuf);
 
 	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
 

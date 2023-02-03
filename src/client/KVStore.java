@@ -11,6 +11,9 @@ public class KVStore implements KVCommInterface {
 
 	private static Logger logger = Logger.getRootLogger();
 
+	private static final int BUFFER_SIZE = 1024;
+	private static final int DROP_SIZE = 128 * BUFFER_SIZE;
+
 	final String address;
 	final int port;
 
@@ -56,44 +59,100 @@ public class KVStore implements KVCommInterface {
 	    this.output.write(b);
 	    this.output.flush();	
 
-/*
-	    this.logger.info("Sent protocol message: Put request with key = " + put_request.getKey() + ", value = " + put_request.getValue()); 
+	    this.logger.info("Sent protocol message: Put request with key = " + key + ", value = " + value); 
 
-	    ProtocolMessage put_reply = (ProtocolMessage) ois.readObject();
-	    this.ois.skipBytes(2);
+	    int byteCount = 0;
+	    int index = 0;
+	    byte[] msgBuf = new byte[BUFFER_SIZE];
 
-	    this.logger.info("Received protocol message: status = " + put_reply.getStatus()); 
+	    byte prev_value = 0;
+	    byte cur_value = 0;
+
+	    while ((cur_value = (byte) this.input.read()) != -1) {
+
+		msgBuf[index++] = cur_value;
+		byteCount++;
+
+		if (byteCount > DROP_SIZE) {
+		    break;
+		}
+
+		if (prev_value == 13 && cur_value == 10) {
+		    break;
+		}
+
+		if (index == BUFFER_SIZE) {
+		    byte[] tmpBuf = new byte[BUFFER_SIZE + byteCount];
+		    System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
+		    msgBuf = tmpBuf;
+		    index = 0;
+		}
+
+		prev_value = cur_value;
+
+	    }
+
+	    byte[] tmpBuf = new byte[byteCount];
+	    System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
+	    msgBuf = tmpBuf;
+
+	    ProtocolMessage put_reply = ProtocolMessage.fromBytesAtClient(msgBuf);
+
+	    this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", put_reply.getStatus(), put_reply.getKey(), put_reply.getValue())); 
 
 	    return put_reply;
-	*/
-	    return new ProtocolMessage(KVMessage.StatusType.FAILED, null, null);
 	}
 
-	@Override
-	public KVMessage get(String key) throws Exception {
+    @Override
+    public KVMessage get(String key) throws Exception {
 
-	    String p = new String("get " + key + "\r\n"); 
-	    byte[] b = p.getBytes("UTF-8");
+	String p = new String("get " + key + "\r\n"); 
+	byte[] b = p.getBytes("UTF-8");
 
-	    this.output.write(b);
-	    this.output.flush();	
-	/*
-	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
+	this.output.write(b);
+	this.output.flush();	
 
-	    this.oos.writeObject(get_request);
-	    this.oos.write('\r');
-	    this.oos.write('\n');
-	    this.oos.flush();
+	this.logger.info("Sent protocol message: GET request with key = " + key + ", value = null"); 
 
-	    this.logger.info("Sent protocol message: GET request with key = " + get_request.getKey() + ", value = " + get_request.getValue()); 
+	int byteCount = 0;
+	int index = 0;
+	byte[] msgBuf = new byte[BUFFER_SIZE];
 
-	    ProtocolMessage get_reply = (ProtocolMessage) this.ois.readObject();
-	    this.ois.skipBytes(2);
+	byte prev_value = 0;
+	byte cur_value = 0;
 
-	    this.logger.info("Received protocol message: status = " + get_reply.getStatus() + ", value = " + get_reply.getValue()); 
+	while ((cur_value = (byte) this.input.read()) != -1) {
 
-	    return get_reply;
-	*/
-	    return new ProtocolMessage(KVMessage.StatusType.FAILED, null, null);
+	    msgBuf[index++] = cur_value;
+	    byteCount++;
+
+	    if (byteCount > DROP_SIZE) {
+		break;
+	    }
+
+	    if (prev_value == 13 && cur_value == 10) {
+		break;
+	    }
+
+	    if (index == BUFFER_SIZE) {
+		byte[] tmpBuf = new byte[BUFFER_SIZE + byteCount];
+		System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
+		msgBuf = tmpBuf;
+		index = 0;
+	    }
+
+	    prev_value = cur_value;
+
 	}
+
+	byte[] tmpBuf = new byte[byteCount];
+	System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
+	msgBuf = tmpBuf;
+
+	ProtocolMessage get_reply = ProtocolMessage.fromBytesAtClient(msgBuf);
+
+	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", get_reply.getStatus(), get_reply.getKey(), get_reply.getValue())); 
+
+	return get_reply;
+    }
 }

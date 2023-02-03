@@ -19,7 +19,11 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	this.value = value;
     }
 
-    public ProtocolMessage(byte[] buf) throws Exception {
+    public static ProtocolMessage fromBytesAtServer(byte[] buf) throws Exception {
+
+	StatusType protocolStatus = null;
+	String protocolKey = null;
+	String protocolValue = null;
 
 	String msgString = new String(buf, StandardCharsets.UTF_8);
 
@@ -27,14 +31,14 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	String status = msgString.substring(0, indexOfFirstSpace);
 
 	if (status.toLowerCase().equals("put")) {
-	    this.status = KVMessage.StatusType.PUT;
+	    protocolStatus = KVMessage.StatusType.PUT;
 	} else if (status.toLowerCase().equals("get")) {
-	    this.status = KVMessage.StatusType.GET;
+	    protocolStatus = KVMessage.StatusType.GET;
 	} else {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	if (this.status == KVMessage.StatusType.PUT) {
+	if (protocolStatus == KVMessage.StatusType.PUT) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
 	    String key = msgString.substring(indexOfFirstSpace + 1, indexOfSecondSpace);
@@ -43,7 +47,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
 	    }
 
-	    this.key = key;
+	    protocolKey = key;
 
 	    String value = msgString.substring(indexOfSecondSpace + 1);
 
@@ -52,7 +56,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    } else if (!value.endsWith("\r\n")) {
 		throw new IllegalArgumentException("Error: Malformed message");
 	    } else {
-		this.value = value.substring(0, value.length() - 2);
+		protocolValue = value.substring(0, value.length() - 2);
 	    }
 	} else {
 	   
@@ -64,10 +68,89 @@ public class ProtocolMessage implements Serializable, KVMessage {
 		throw new IllegalArgumentException("Error: Malformed message");
 	    }
 
-	    this.key = key.substring(0, key.length() - 2);
-	    this.value = "null";
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
 
 	}
+
+	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
+
+    }
+
+    public static ProtocolMessage fromBytesAtClient(byte[] buf) throws Exception {
+
+	StatusType protocolStatus = null;
+	String protocolKey = null;
+	String protocolValue = null;
+
+	String msgString = new String(buf, StandardCharsets.UTF_8);
+
+	int indexOfFirstSpace = msgString.indexOf(" ");
+	String status = msgString.substring(0, indexOfFirstSpace);
+
+	if (status.toLowerCase().equals("put_success")) {
+	    protocolStatus = KVMessage.StatusType.PUT_SUCCESS;
+	} else if (status.toLowerCase().equals("put_update")) {
+	    protocolStatus = StatusType.PUT_UPDATE;
+	} else if (status.toLowerCase().equals("put_error")) {
+	    protocolStatus = StatusType.PUT_ERROR;
+	} else if (status.toLowerCase().equals("get_success")) {
+	    protocolStatus = StatusType.GET_SUCCESS;
+	} else if (status.toLowerCase().equals("get_error")) {
+	    protocolStatus = StatusType.GET_ERROR;
+	} else if (status.toLowerCase().equals("failed")) {
+	    protocolStatus = StatusType.FAILED;
+	} else {
+	    throw new IllegalArgumentException("Error: Malformed StatusType response from server");
+	}
+
+	if (protocolStatus == StatusType.PUT_SUCCESS || protocolStatus == StatusType.PUT_UPDATE || protocolStatus == StatusType.PUT_ERROR || protocolStatus == StatusType.GET_SUCCESS) {
+
+	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
+	    String key = msgString.substring(indexOfFirstSpace + 1, indexOfSecondSpace);
+
+	    if (key.getBytes().length > 20) {
+		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
+	    }
+
+	    protocolKey = key;
+
+	    String value = msgString.substring(indexOfSecondSpace + 1);
+
+	    if (value.getBytes().length > 120 * 1024) {
+		throw new IllegalArgumentException("Error: Value must be less than or equal to 120 kilobytes");
+	    } else if (!value.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message from server");
+	    } else {
+		protocolValue = value.substring(0, value.length() - 2);
+	    }
+	} else if (protocolStatus == StatusType.GET_ERROR) {
+	   
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (key.getBytes().length > 20) {
+		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
+	    } else if (!key.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message from server");
+	    }
+
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
+
+	} else {
+
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (!key.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message from server");
+	    }
+
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
+
+	}
+
+	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
 
     }
 
