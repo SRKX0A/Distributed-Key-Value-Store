@@ -12,6 +12,9 @@ import shared.messages.KVMessage.StatusType;
 public class Connection extends Thread {
     
     private static Logger logger = Logger.getRootLogger();
+
+    private static final int BUFFER_SIZE = 1024;
+    private static final int DROP_SIZE = 128 * BUFFER_SIZE;
     
     private KVServer kvServer;
 
@@ -20,18 +23,12 @@ public class Connection extends Thread {
     private InputStream input;
     private OutputStream output;
 
-    private ObjectInputStream ois;
-    private ObjectOutputStream oos;
-
     public Connection(Socket socket, KVServer kvServer) throws IOException {
 	this.kvServer = kvServer;
 
 	this.socket = socket;
 	this.input = socket.getInputStream();
 	this.output = socket.getOutputStream();
-
-	this.ois = new ObjectInputStream(this.input);
-	this.oos = new ObjectOutputStream(this.output);
 
     }
 
@@ -74,24 +71,21 @@ public class Connection extends Thread {
 
 		}
 
-	    } catch (ClassNotFoundException cnfe) {
-	    
-		this.logger.error("Client message format failure: " + cnfe.toString());
+	    } catch (IllegalArgumentException iae) {
+		this.logger.error("Client message format failure: " + iae.toString());
 
 		try {
-		    this.sendMessage(StatusType.FAILED, "Error: Message format unknown.", "Error: Message format unknown.");
+		    this.sendMessage(StatusType.FAILED, iae.toString(), iae.toString());
 		} catch (Exception e) {
 		    this.logger.error("Failed to send failure message: " + e.toString()); 
-		    return;
 		}
-
 
 	    } catch(Exception e) {
 		this.logger.error("Client connection failure: " + e.toString());
 
 		try {
-		    this.oos.close();
-		    this.ois.close();
+		    this.output.close();
+		    this.input.close();
 		    this.socket.close();
 		} catch (IOException ioe) {
 		    this.logger.error("Failed to gracefully close connection: " + ioe.toString()); 
@@ -105,25 +99,51 @@ public class Connection extends Thread {
 
     }
 
-    private ProtocolMessage receiveMessage() throws ClassNotFoundException, IOException {
+    private ProtocolMessage receiveMessage() throws IllegalArgumentException, IOException, Exception {
 
-	ProtocolMessage request = (ProtocolMessage) this.ois.readObject();
-	this.ois.skipBytes(2);
+	int byteCount = 0;
+	int index = 0;
+	byte[] msgBuf = new byte[BUFFER_SIZE];
 
+	byte prev_value = 0;
+	byte cur_value = 0;
+
+	while ((cur_value = (byte) this.input.read()) != -1) {
+	    
+	    msgBuf[index++] = cur_value;
+	    byteCount++;
+
+	    if (byteCount > DROP_SIZE) {
+		break;
+	    }
+
+	    if (prev_value == 10 && cur_value == 13) {
+		break;
+	    }
+
+	    if (index == BUFFER_SIZE) {
+		byte[] tmpBuf = new byte[BUFFER_SIZE + byteCount];
+		System.arraycopy(msgBuf, 0, tmpBuf, 0, BUFFER_SIZE);
+		msgBuf = tmpBuf;
+		index = 0;
+	    }
+
+	    prev_value = cur_value;
+
+	}
+
+	ProtocolMessage request = new ProtocolMessage(msgBuf);
 
 	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
 
 	return request;
     }
 
-    private void sendMessage(StatusType status, String key, String value) throws IOException {
+    private void sendMessage(StatusType status, String key, String value) throws Exception {
 	
 	ProtocolMessage response = new ProtocolMessage(status, key, value);
-
-	this.oos.writeObject(response);
-	this.oos.write('\r');
-	this.oos.write('\n');
-	this.oos.flush();
+	this.output.write(response.getBytes());
+	this.output.flush();
 
 	this.logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }

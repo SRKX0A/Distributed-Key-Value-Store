@@ -19,9 +19,6 @@ public class KVStore implements KVCommInterface {
 	InputStream input;
 	OutputStream output;
 
-	ObjectInputStream ois;
-	ObjectOutputStream oos;
-
 	/**
 	 * Initialize KVStore with address and port of KVServer
 	 * @param address the address of the KVServer
@@ -37,15 +34,13 @@ public class KVStore implements KVCommInterface {
 	    this.socket = new Socket(this.address, this.port);
 	    this.input = this.socket.getInputStream();
 	    this.output = this.socket.getOutputStream();
-	    this.ois = new ObjectInputStream(this.input);	
-	    this.oos = new ObjectOutputStream(this.output);	
 	}
 
 	@Override
 	public void disconnect() {
 	    try {
-		this.oos.close(); 
-		this.ois.close(); 
+		this.output.close(); 
+		this.input.close(); 
 		this.socket.close();
 	    } catch (Exception e) {
 		this.logger.error(e.toString());
@@ -54,13 +49,7 @@ public class KVStore implements KVCommInterface {
 
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
-	    ProtocolMessage put_request = new ProtocolMessage(KVMessage.StatusType.PUT, key, value); 
-
-	    this.oos.writeObject(put_request);
-	    this.oos.write('\r');
-	    this.oos.write('\n');
-	    this.oos.flush();
-
+/*
 	    this.logger.info("Sent protocol message: Put request with key = " + put_request.getKey() + ", value = " + put_request.getValue()); 
 
 	    ProtocolMessage put_reply = (ProtocolMessage) ois.readObject();
@@ -69,10 +58,13 @@ public class KVStore implements KVCommInterface {
 	    this.logger.info("Received protocol message: status = " + put_reply.getStatus()); 
 
 	    return put_reply;
+	*/
+	    return new ProtocolMessage(KVMessage.StatusType.FAILED, null, null);
 	}
 
 	@Override
 	public KVMessage get(String key) throws Exception {
+	/*
 	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
 
 	    this.oos.writeObject(get_request);
@@ -88,5 +80,7 @@ public class KVStore implements KVCommInterface {
 	    this.logger.info("Received protocol message: status = " + get_reply.getStatus() + ", value = " + get_reply.getValue()); 
 
 	    return get_reply;
+	*/
+	    return new ProtocolMessage(KVMessage.StatusType.FAILED, null, null);
 	}
 }
