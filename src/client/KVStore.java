@@ -71,6 +71,12 @@ public class KVStore implements KVCommInterface {
 
 	@Override
 	public KVMessage get(String key) throws Exception {
+
+	    String p = new String("get " + key + "\r\n"); 
+	    byte[] b = p.getBytes("UTF-8");
+
+	    this.output.write(b);
+	    this.output.flush();	
 	/*
 	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
 

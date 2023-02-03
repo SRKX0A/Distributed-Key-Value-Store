@@ -34,23 +34,39 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
-	String key = msgString.substring(indexOfFirstSpace + 1, indexOfSecondSpace);
+	if (this.status == KVMessage.StatusType.PUT) {
 
-	if (key.getBytes().length > 20) {
-	    throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
-	}
+	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
+	    String key = msgString.substring(indexOfFirstSpace + 1, indexOfSecondSpace);
 
-	this.key = key;
+	    if (key.getBytes().length > 20) {
+		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
+	    }
 
-	String value = msgString.substring(indexOfSecondSpace + 1);
+	    this.key = key;
 
-	if (value.getBytes().length > 120 * 1024) {
-	    throw new IllegalArgumentException("Error: Value must be less than or equal to 120 kilobytes");
-	} else if (!value.endsWith("\r\n")) {
-	    throw new IllegalArgumentException("Error: Malformed message");
+	    String value = msgString.substring(indexOfSecondSpace + 1);
+
+	    if (value.getBytes().length > 120 * 1024) {
+		throw new IllegalArgumentException("Error: Value must be less than or equal to 120 kilobytes");
+	    } else if (!value.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message");
+	    } else {
+		this.value = value.substring(0, value.length() - 2);
+	    }
 	} else {
-	    this.value = value.substring(0, value.length() - 2);
+	   
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (key.getBytes().length > 20) {
+		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
+	    } else if (!key.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message");
+	    }
+
+	    this.key = key.substring(0, key.length() - 2);
+	    this.value = "null";
+
 	}
 
     }
