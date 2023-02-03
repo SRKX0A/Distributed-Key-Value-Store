@@ -40,36 +40,45 @@ public class Connection extends Thread {
 		if (request.getStatus() == StatusType.PUT) {
 		    try {
 			StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
-			this.sendMessage(response_status, null);
+			this.sendMessage(response_status, request.getKey(), request.getValue());
 		    } catch (Exception e) {
-
 			this.logger.error("Failure in handling PUT request: " + e.toString());
-
-			if (request.getValue() == null) {
-			    this.sendMessage(StatusType.DELETE_ERROR, null);
-			} else {
-			    this.sendMessage(StatusType.PUT_ERROR, null);
-			}
-
+			this.sendMessage(StatusType.PUT_ERROR, request.getKey(), request.getValue());
 		    }
-		} else {
+		} else if (request.getStatus() == StatusType.GET) {
 		    
 		    try {
 
 			String value = this.kvServer.getKV(request.getKey());
 
-			if (value == null) {
-			    this.sendMessage(StatusType.GET_ERROR, null);
+			if (value.equals("null")) {
+			    this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
 			} else {
-			    this.sendMessage(StatusType.GET_SUCCESS, value);
+			    this.sendMessage(StatusType.GET_SUCCESS, request.getKey(), value);
 			}
 		    	
 		    } catch (Exception e) {
 			this.logger.error("Failure to handle GET request: " + e.toString());
-			this.sendMessage(StatusType.GET_ERROR, null);
+			this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
 		    }
+		} else {
+		    
+		    this.logger.error("Client message format failure: Invalid request status.");
+		    this.sendMessage(StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
 
 		}
+
+	    } catch (ClassNotFoundException cnfe) {
+	    
+		this.logger.error("Client message format failure: " + cnfe.toString());
+
+		try {
+		    this.sendMessage(StatusType.FAILED, "Error: Message format unknown.", "Error: Message format unknown.");
+		} catch (Exception e) {
+		    this.logger.error("Failed to send failure message: " + e.toString()); 
+		    return;
+		}
+
 
 	    } catch(Exception e) {
 		this.logger.error("Client connection failure: " + e.toString());
@@ -97,14 +106,14 @@ public class Connection extends Thread {
 	ois.skipBytes(2);
 
 
-	this.logger.info("Received protocol message: status = " + request.getStatus() + ", key = " + request.getKey() + ", value = " + request.getValue()); 
+	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
 
 	return request;
     }
 
-    private void sendMessage(StatusType status, String value) throws IOException {
+    private void sendMessage(StatusType status, String key, String value) throws IOException {
 	
-	ProtocolMessage response = new ProtocolMessage(status, null, value);
+	ProtocolMessage response = new ProtocolMessage(status, key, value);
 
 	ObjectOutputStream oos = new ObjectOutputStream(this.output);
 
@@ -113,6 +122,6 @@ public class Connection extends Thread {
 	oos.write('\n');
 	oos.flush();
 
-	this.logger.info("Sent protocol message: Put response with status = " + response.getStatus());
+	this.logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }
 }

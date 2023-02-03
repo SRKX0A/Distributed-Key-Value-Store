@@ -19,9 +19,11 @@ public class KVServer extends Thread implements IKVServer {
     private static Logger logger = Logger.getRootLogger();
     private ServerSocket socket;
 
+    private String address;
     private int port;
+    private String directory;
+
     private int cacheSize;
-    private String strategy;
 
     private boolean online;
 
@@ -38,14 +40,15 @@ public class KVServer extends Thread implements IKVServer {
 	*           currently not contained in the cache. Options are "FIFO", "LRU",
 	*           and "LFU".
 	*/
-    public KVServer(int port, int cacheSize, String strategy) throws IOException {
+    public KVServer(String address, int port, String directory) throws IOException {
+	this.address = address;
 	this.port = port;
-	this.cacheSize = cacheSize;
-	this.strategy = strategy;
+	this.directory = directory;
+	this.cacheSize = 5;
 
 	this.online = true;
 
-	this.wal = new File("data/wal.txt");
+	this.wal = new File(this.directory, "wal.txt");
 	this.memtable = new TreeMap<String, String>();
 
 	Scanner scanner = new Scanner(this.wal);
@@ -53,7 +56,7 @@ public class KVServer extends Thread implements IKVServer {
 	while (scanner.hasNext()) {
 	    String test_key = scanner.next();
 	    String test_value = scanner.next();
-	    this.memtable.put(test_key, (test_value.length() != 0) ? test_value : null);
+	    this.memtable.put(test_key, test_value);
 	}
 	scanner.close();
 
@@ -70,11 +73,10 @@ public class KVServer extends Thread implements IKVServer {
 	return this.socket.getInetAddress().getHostName();
     }
 
-	@Override
+    @Override
     public CacheStrategy getCacheStrategy(){
-		// TODO Auto-generated method stub
-		return IKVServer.CacheStrategy.None;
-	}
+	    return IKVServer.CacheStrategy.None;
+    }
 
     @Override
     public int getCacheSize(){
@@ -84,9 +86,13 @@ public class KVServer extends Thread implements IKVServer {
     @Override
     public boolean inStorage(String key) throws Exception {
 
-	File store_dir = new File("data/store");
+	File store_dir = new File(this.directory);
 
-	File[] store_files = store_dir.listFiles();
+	File[] store_files = store_dir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("KVServerStoreFile_");
+	    }
+	});
 
 	Arrays.sort(store_files, new Comparator<File>() {
 	    public int compare(File f1, File f2) {
@@ -101,7 +107,7 @@ public class KVServer extends Thread implements IKVServer {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
-		    if (test_value == null) {
+		    if (test_value.equals("null")) {
 			return false;
 		    } else {
 			return true;
@@ -128,9 +134,13 @@ public class KVServer extends Thread implements IKVServer {
 	    return this.memtable.get(key);
 	}
 
-	File store_dir = new File("data/store");
+	File store_dir = new File(this.directory);
 
-	File[] store_files = store_dir.listFiles();
+	File[] store_files = store_dir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("KVServerStoreFile_");
+	    }
+	});
 
 	Arrays.sort(store_files, new Comparator<File>() {
 	    public int compare(File f1, File f2) {
@@ -145,17 +155,14 @@ public class KVServer extends Thread implements IKVServer {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
-		    if (test_value.length() != 0) {
-			return test_value;
-		    } else {
-			return null;
-		    }
+		    this.logger.info("Got key = " + key + " from storage with value = " + test_value);
+		    return test_value;
 		}
 	    }
 	    scanner.close();
 	}
 
-	return null;
+	return "null";
 
     }
 
@@ -171,26 +178,20 @@ public class KVServer extends Thread implements IKVServer {
 
 	StatusType response = StatusType.PUT_SUCCESS;
 
-	if (previousValue != null || (!presentInCache && this.inStorage(key))) {
+	if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
 	    response = StatusType.PUT_UPDATE;
 	}
-
-	if (value == null) {
-	    response = StatusType.DELETE_SUCCESS;
-	}
-
 
 	if (this.memtable.size() >= this.cacheSize) {
 
 	    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
 
-	    File dumpedFile = new File("data/store", timestamp + ".txt"); 
+	    File dumpedFile = new File(this.directory, "KVServerStoreFile_" + timestamp + ".txt"); 
 	    dumpedFile.createNewFile();
 
 	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
 	    for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
-		String val = (entry.getValue() == null) ? "" : entry.getValue();
-		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), val));		
+		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
 	    }
 
 	    dumpedWriter.close();

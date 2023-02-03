@@ -32,8 +32,6 @@ public class App_KVClient extends Thread {
 
 		if (value.equals("g")) {
 		    this.client.get(key);
-		} else if (value.equals("d")) {
-		    this.client.put(key, null);
 		} else {
 		    this.client.put(key, value);
 		}
