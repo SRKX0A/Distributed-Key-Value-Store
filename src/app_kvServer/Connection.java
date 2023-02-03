@@ -109,7 +109,7 @@ public class Connection extends Thread {
 	byte cur_value = 0;
 
 	while ((cur_value = (byte) this.input.read()) != -1) {
-	    
+
 	    msgBuf[index++] = cur_value;
 	    byteCount++;
 
@@ -117,13 +117,13 @@ public class Connection extends Thread {
 		break;
 	    }
 
-	    if (prev_value == 10 && cur_value == 13) {
+	    if (prev_value == 13 && cur_value == 10) {
 		break;
 	    }
 
 	    if (index == BUFFER_SIZE) {
 		byte[] tmpBuf = new byte[BUFFER_SIZE + byteCount];
-		System.arraycopy(msgBuf, 0, tmpBuf, 0, BUFFER_SIZE);
+		System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
 		msgBuf = tmpBuf;
 		index = 0;
 	    }
@@ -131,6 +131,10 @@ public class Connection extends Thread {
 	    prev_value = cur_value;
 
 	}
+
+	byte[] tmpBuf = new byte[byteCount];
+	System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
+	msgBuf = tmpBuf;
 
 	ProtocolMessage request = new ProtocolMessage(msgBuf);
 

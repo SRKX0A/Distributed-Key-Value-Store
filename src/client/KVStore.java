@@ -49,6 +49,13 @@ public class KVStore implements KVCommInterface {
 
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
+    
+	    String p = new String("put " + key + " " + value + "\r\n"); 
+	    byte[] b = p.getBytes("UTF-8");
+
+	    this.output.write(b);
+	    this.output.flush();	
+
 /*
 	    this.logger.info("Sent protocol message: Put request with key = " + put_request.getKey() + ", value = " + put_request.getValue()); 
 

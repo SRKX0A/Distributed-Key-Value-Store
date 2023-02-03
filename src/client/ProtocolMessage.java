@@ -26,9 +26,9 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	int indexOfFirstSpace = msgString.indexOf(" ");
 	String status = msgString.substring(0, indexOfFirstSpace);
 
-	if (status.toLowerCase() == "put") {
+	if (status.toLowerCase().equals("put")) {
 	    this.status = KVMessage.StatusType.PUT;
-	} else if (status.toLowerCase() == "get") {
+	} else if (status.toLowerCase().equals("get")) {
 	    this.status = KVMessage.StatusType.GET;
 	} else {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
