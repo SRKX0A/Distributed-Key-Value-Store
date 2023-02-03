@@ -19,6 +19,9 @@ public class KVStore implements KVCommInterface {
 	InputStream input;
 	OutputStream output;
 
+	ObjectInputStream ois;
+	ObjectOutputStream oos;
+
 	/**
 	 * Initialize KVStore with address and port of KVServer
 	 * @param address the address of the KVServer
@@ -34,11 +37,15 @@ public class KVStore implements KVCommInterface {
 	    this.socket = new Socket(this.address, this.port);
 	    this.input = this.socket.getInputStream();
 	    this.output = this.socket.getOutputStream();
+	    this.ois = new ObjectInputStream(this.input);	
+	    this.oos = new ObjectOutputStream(this.input);	
 	}
 
 	@Override
 	public void disconnect() {
 	    try {
+		this.oos.close(); 
+		this.ois.close(); 
 		this.socket.close();
 	    } catch (Exception e) {
 		this.logger.error(e.toString());
@@ -49,17 +56,15 @@ public class KVStore implements KVCommInterface {
 	public KVMessage put(String key, String value) throws Exception {
 	    ProtocolMessage put_request = new ProtocolMessage(KVMessage.StatusType.PUT, key, value); 
 
-	    ObjectOutputStream oos = new ObjectOutputStream(this.output);
-	    oos.writeObject(put_request);
-	    oos.write('\r');
-	    oos.write('\n');
-	    oos.flush();
+	    this.oos.writeObject(put_request);
+	    this.oos.write('\r');
+	    this.oos.write('\n');
+	    this.oos.flush();
 
 	    this.logger.info("Sent protocol message: Put request with key = " + put_request.getKey() + ", value = " + put_request.getValue()); 
 
-	    ObjectInputStream ois = new ObjectInputStream(this.input);
 	    ProtocolMessage put_reply = (ProtocolMessage) ois.readObject();
-	    ois.skipBytes(2);
+	    this.ois.skipBytes(2);
 
 	    this.logger.info("Received protocol message: status = " + put_reply.getStatus()); 
 
@@ -70,17 +75,15 @@ public class KVStore implements KVCommInterface {
 	public KVMessage get(String key) throws Exception {
 	    ProtocolMessage get_request = new ProtocolMessage(KVMessage.StatusType.GET, key, null);
 
-	    ObjectOutputStream oos = new ObjectOutputStream(this.output);
-	    oos.writeObject(get_request);
-	    oos.write('\r');
-	    oos.write('\n');
-	    oos.flush();
+	    this.oos.writeObject(get_request);
+	    this.oos.write('\r');
+	    this.oos.write('\n');
+	    this.oos.flush();
 
 	    this.logger.info("Sent protocol message: GET request with key = " + get_request.getKey() + ", value = " + get_request.getValue()); 
 
-	    ObjectInputStream ois = new ObjectInputStream(this.input);
-	    ProtocolMessage get_reply = (ProtocolMessage) ois.readObject();
-	    ois.skipBytes(2);
+	    ProtocolMessage get_reply = (ProtocolMessage) this.ois.readObject();
+	    this.ois.skipBytes(2);
 
 	    this.logger.info("Received protocol message: status = " + get_reply.getStatus() + ", value = " + get_reply.getValue()); 
 

@@ -20,12 +20,18 @@ public class Connection extends Thread {
     private InputStream input;
     private OutputStream output;
 
+    private ObjectInputStream ois;
+    private ObjectOutputStream oos;
+
     public Connection(Socket socket, KVServer kvServer) throws IOException {
 	this.kvServer = kvServer;
 
 	this.socket = socket;
 	this.input = socket.getInputStream();
 	this.output = socket.getOutputStream();
+
+	this.ois = new ObjectInputStream(this.input);
+	this.oos = new ObjectOutputStream(this.output);
 
     }
 
@@ -84,8 +90,8 @@ public class Connection extends Thread {
 		this.logger.error("Client connection failure: " + e.toString());
 
 		try {
-		    this.input.close();
-		    this.output.close();
+		    this.oos.close();
+		    this.ois.close();
 		    this.socket.close();
 		} catch (IOException ioe) {
 		    this.logger.error("Failed to gracefully close connection: " + ioe.toString()); 
@@ -100,10 +106,9 @@ public class Connection extends Thread {
     }
 
     private ProtocolMessage receiveMessage() throws ClassNotFoundException, IOException {
-	ObjectInputStream ois = new ObjectInputStream(this.input);
 
-	ProtocolMessage request = (ProtocolMessage) ois.readObject();
-	ois.skipBytes(2);
+	ProtocolMessage request = (ProtocolMessage) this.ois.readObject();
+	this.ois.skipBytes(2);
 
 
 	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
@@ -115,12 +120,10 @@ public class Connection extends Thread {
 	
 	ProtocolMessage response = new ProtocolMessage(status, key, value);
 
-	ObjectOutputStream oos = new ObjectOutputStream(this.output);
-
-	oos.writeObject(response);
-	oos.write('\r');
-	oos.write('\n');
-	oos.flush();
+	this.oos.writeObject(response);
+	this.oos.write('\r');
+	this.oos.write('\n');
+	this.oos.flush();
 
 	this.logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }
