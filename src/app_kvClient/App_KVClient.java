@@ -11,6 +11,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import logger.LogSetup;
+import shared.messages.KVMessage;
 
 public class App_KVClient extends Thread {
 
@@ -116,7 +117,8 @@ public class App_KVClient extends Thread {
 				System.out.println("Invalid Number of Arguements");
 				return;
 			}
-			this.client.get(commands[1]);
+			KVMessage message = this.client.get(commands[1]);
+			System.out.println(message.getValue() == null || message.getValue() == "null" ? "Error: Key Not Found" :message.getValue());
 
 		} catch (Exception e) {
 			logger.error("FAILED: " + e.toString());
@@ -129,11 +131,16 @@ public class App_KVClient extends Thread {
 				System.out.println("Client currently not connected to a server. Please Connect To A Server");
 				return;
 			}
-			if (commands.length != 3) {
+			if (commands.length < 3) {
 				System.out.println("Invalid Number of Arguements");
 				return;
 			}
-			this.client.put(commands[1], commands[2]);
+
+			String[] value = new String[commands.length - 2];
+			System.arraycopy(commands, 2, value, 0, commands.length - 2); 
+			String result = String.join(" ", value);
+			KVMessage message = this.client.put(commands[1], result);
+			System.out.println("SUCCESS");
 
 		} catch (Exception e) {
 			logger.error("FAILED: " + e.toString());
