@@ -97,8 +97,8 @@ public class KVStore implements KVCommInterface {
 
 	while ((cur_value = (byte) this.input.read()) != -1) {
 
-	    msgBuf[index++] = cur_value;
-	    byteCount++;
+	    msgBuf[byteCount++] = cur_value;
+	    index++;
 
 	    if (byteCount > DROP_SIZE) {
 		break;

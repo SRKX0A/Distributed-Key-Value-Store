@@ -114,8 +114,8 @@ public class Connection extends Thread {
 
 	while ((cur_value = (byte) this.input.read()) != -1) {
 
-	    msgBuf[index++] = cur_value;
-	    byteCount++;
+	    msgBuf[byteCount++] = cur_value;
+	    index++;
 
 	    if (byteCount > DROP_SIZE) {
 		break;
