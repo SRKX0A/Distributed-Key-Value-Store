@@ -61,42 +61,7 @@ public class KVStore implements KVCommInterface {
 
 	    this.logger.info("Sent protocol message: Put request with key = " + key + ", value = " + value); 
 
-	    int byteCount = 0;
-	    int index = 0;
-	    byte[] msgBuf = new byte[BUFFER_SIZE];
-
-	    byte prev_value = 0;
-	    byte cur_value = 0;
-
-	    while ((cur_value = (byte) this.input.read()) != -1) {
-
-		msgBuf[index++] = cur_value;
-		byteCount++;
-
-		if (byteCount > DROP_SIZE) {
-		    break;
-		}
-
-		if (prev_value == 13 && cur_value == 10) {
-		    break;
-		}
-
-		if (index == BUFFER_SIZE) {
-		    byte[] tmpBuf = new byte[BUFFER_SIZE + byteCount];
-		    System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
-		    msgBuf = tmpBuf;
-		    index = 0;
-		}
-
-		prev_value = cur_value;
-
-	    }
-
-	    byte[] tmpBuf = new byte[byteCount];
-	    System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
-	    msgBuf = tmpBuf;
-
-	    ProtocolMessage put_reply = ProtocolMessage.fromBytesAtClient(msgBuf);
+	    ProtocolMessage put_reply = this.receiveMessage();
 
 	    this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", put_reply.getStatus(), put_reply.getKey(), put_reply.getValue())); 
 
@@ -113,6 +78,15 @@ public class KVStore implements KVCommInterface {
 	this.output.flush();	
 
 	this.logger.info("Sent protocol message: GET request with key = " + key + ", value = null"); 
+
+	ProtocolMessage get_reply = this.receiveMessage();
+
+	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", get_reply.getStatus(), get_reply.getKey(), get_reply.getValue())); 
+
+	return get_reply;
+    }
+
+    public ProtocolMessage receiveMessage() throws Exception {
 
 	int byteCount = 0;
 	int index = 0;
@@ -149,10 +123,6 @@ public class KVStore implements KVCommInterface {
 	System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
 	msgBuf = tmpBuf;
 
-	ProtocolMessage get_reply = ProtocolMessage.fromBytesAtClient(msgBuf);
-
-	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", get_reply.getStatus(), get_reply.getKey(), get_reply.getValue())); 
-
-	return get_reply;
+	return ProtocolMessage.fromBytesAtClient(msgBuf);
     }
 }

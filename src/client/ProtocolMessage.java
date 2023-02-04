@@ -27,7 +27,13 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String msgString = new String(buf, StandardCharsets.UTF_8);
 
+
 	int indexOfFirstSpace = msgString.indexOf(" ");
+
+	if (indexOfFirstSpace == -1) {
+	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
+	}
+
 	String status = msgString.substring(0, indexOfFirstSpace);
 
 	if (status.toLowerCase().equals("put")) {
@@ -41,6 +47,11 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	if (protocolStatus == KVMessage.StatusType.PUT) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
+
+	    if (indexOfSecondSpace == -1) {
+		throw new IllegalArgumentException("Error: PUT request must have an associated value");
+	    }
+
 	    String key = msgString.substring(indexOfFirstSpace + 1, indexOfSecondSpace);
 
 	    if (key.getBytes().length > 20) {
