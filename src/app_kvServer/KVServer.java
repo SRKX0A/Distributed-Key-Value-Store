@@ -25,7 +25,8 @@ public class KVServer extends Thread implements IKVServer {
 
     private int cacheSize;
 
-    private boolean online;
+    private volatile boolean online;
+    private volatile boolean finished;
 
     private File wal;
     private TreeMap<String, String> memtable;
@@ -40,13 +41,11 @@ public class KVServer extends Thread implements IKVServer {
 	*           currently not contained in the cache. Options are "FIFO", "LRU",
 	*           and "LFU".
 	*/
-    public KVServer(String address, int port, String directory) throws IOException {
+    public KVServer(String address, int port, String directory, int cacheSize) throws IOException {
 	this.address = address;
 	this.port = port;
 	this.directory = directory;
-	this.cacheSize = 5;
-
-	this.online = true;
+	this.cacheSize = cacheSize;
 
 	this.wal = new File(this.directory, "wal.txt");
 	this.memtable = new TreeMap<String, String>();
@@ -65,7 +64,7 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public int getPort() {
-	return this.port;
+	return this.socket.getLocalPort();
     }
 
     @Override
@@ -122,7 +121,7 @@ public class KVServer extends Thread implements IKVServer {
     }
 
     @Override
-    public boolean inCache(String key){
+    public boolean inCache(String key) {
 	return this.memtable.containsKey(key);
     }
 
@@ -182,6 +181,10 @@ public class KVServer extends Thread implements IKVServer {
 	    response = StatusType.PUT_UPDATE;
 	}
 
+	if (value.equals("null")) {
+	    response = StatusType.PUT_SUCCESS;
+	}
+
 	if (this.memtable.size() >= this.cacheSize) {
 
 	    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
@@ -207,13 +210,13 @@ public class KVServer extends Thread implements IKVServer {
     }
 
     @Override
-    public void clearCache(){
-		// TODO Auto-generated method stub
+    public void clearCache() {
+	this.memtable.clear();
     }
 
     @Override
-    public void clearStorage(){
-		// TODO Auto-generated method stub
+    public void clearStorage() {
+	return;	
     }
 
     @Override
@@ -231,15 +234,25 @@ public class KVServer extends Thread implements IKVServer {
 	this.online = false;
     }
 
+    public boolean isOnline() {
+	return this.online;
+    }
+
+    public boolean isFinished() {
+	return this.finished;
+    }
+
     @Override
     public void run() {
 
 	logger.info("Starting server...");	
 	try {
 	    this.socket = new ServerSocket(this.port, 0, InetAddress.getByName(this.address));
+	    this.online = true;
 	    logger.info("Server listening on port: " + this.socket.getLocalPort());
 	} catch (IOException e) {
 	    logger.error("Cannot open server socket: " + e.toString());
+	    this.finished = true;
 	    return;
 	}
 
@@ -249,12 +262,15 @@ public class KVServer extends Thread implements IKVServer {
 		Socket client = this.socket.accept();
 		new Connection(client, this).start();
 		logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
+	    } catch (SocketException e) {
+		logger.info(String.format("SocketException received: %s", e.toString()));
 	    } catch (IOException e) {
 		logger.error(String.format("Unable to establish connection: %s", e.toString()));
 	    }
 
 	}
 
+	this.finished = true;
 	logger.info("Server stopped...");
     }
 }

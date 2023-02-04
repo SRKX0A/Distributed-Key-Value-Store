@@ -80,8 +80,12 @@ public class Connection extends Thread {
 		    this.logger.error("Failed to send failure message: " + e.toString()); 
 		}
 
-	    } catch(Exception e) {
-		this.logger.error("Client connection failure: " + e.toString());
+	    } catch (EOFException eofe) {
+		this.logger.info("Client connection closed: " + eofe.toString());
+		return;
+	    } 
+	    catch(Exception e) {
+		this.logger.info("Client connection failure: " + e.toString());
 
 		try {
 		    this.output.close();
@@ -130,6 +134,10 @@ public class Connection extends Thread {
 
 	    prev_value = cur_value;
 
+	}
+
+	if (cur_value == -1 && byteCount == 0) {
+	    throw new EOFException("EOF reached");
 	}
 
 	byte[] tmpBuf = new byte[byteCount];

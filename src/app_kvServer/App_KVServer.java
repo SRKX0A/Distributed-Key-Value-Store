@@ -12,6 +12,7 @@ public class App_KVServer {
     public static void main(String[] args) {
 
 	Option portOption = Option.builder("p").desc("port which server listens on").hasArg().required().type(String.class).build();
+	Option cacheSizeOption = Option.builder("c").desc("sets cache size on server").hasArg().type(String.class).build();
 	Option addressOption = Option.builder("a").desc("address which server listens to").hasArg().type(String.class).build();
 	Option directoryOption = Option.builder("d").desc("directory for persistent files").hasArg().type(String.class).build();
 	Option logOption = Option.builder("l").desc("relative path of the logfile").hasArg().type(String.class).build();
@@ -20,6 +21,7 @@ public class App_KVServer {
 	
 	Options options = new Options();	
 	options.addOption(portOption);
+	options.addOption(cacheSizeOption);
 	options.addOption(addressOption);
 	options.addOption(directoryOption);
 	options.addOption(logOption);
@@ -35,18 +37,31 @@ public class App_KVServer {
 	    System.exit(1);
 	}
 
+	int port = 0;
+	int cacheSize = 100;
 	String address = "localhost";
 	String directory = "./";
 	String logPath = "server.log";
 	Level logLevel = Level.ALL;
 
-	int port = 0;
 
 	try {
 	    port = (int) Integer.parseInt(cmd.getOptionValue("p"));
 	} catch (Exception pe) {
 	    System.err.println("Parsing failed. Reason: " + pe.getMessage());
 	    System.exit(1);
+	}
+
+	if (cmd.hasOption("c")) {
+	    try {
+		cacheSize = (int) Integer.parseInt(cmd.getOptionValue("c"));
+		if (cacheSize <= 0 || cacheSize >= 16777216) {
+		    throw new IllegalArgumentException("Error: cache size must be between 1 and 16777215"); 
+		}
+	    } catch (Exception e) {
+		System.err.println("Parsing failed. Reason: " + e.getMessage());
+		System.exit(1);
+	    }
 	}
 	
 	if (cmd.hasOption("a")) {
@@ -74,7 +89,7 @@ public class App_KVServer {
 	    File wal = new File(directory, "wal.txt");
 	    wal.createNewFile();
 
-	    new KVServer(address, port, directory).start();
+	    new KVServer(address, port, directory, cacheSize).start();
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(1);
