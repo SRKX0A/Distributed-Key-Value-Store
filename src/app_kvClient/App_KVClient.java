@@ -124,8 +124,10 @@ public class App_KVClient extends Thread {
 			System.out.println((message.getValue() == null || message.getValue().equals("null")) ? "Error: Key Not Found" : message.getValue());
 
 		} catch (EOFException e) {
-		    logger.info("Server disconnected: " + e.toString());	
-		    System.out.println("Server disconnected: " + e.toString());	
+		    logger.info("Error: Server disconnected: " + e.toString());	
+		    System.out.println("Error: Server disconnected: " + e.toString());	
+		    this.connected = false;
+		    this.client.disconnect();
 		} catch (Exception e) {
 			logger.error("ERROR: " + e.toString());
 			System.out.println("ERROR: " + e.toString());
@@ -154,8 +156,10 @@ public class App_KVClient extends Thread {
 			}
 
 		} catch (EOFException e) {
-		    logger.info("Server disconnected: " + e.toString());	
-		    System.out.println("Server disconnected: " + e.toString());	
+		    logger.info("Error: Server disconnected: " + e.toString());	
+		    System.out.println("Error: Server disconnected: " + e.toString());	
+		    this.connected = false;
+		    this.client.disconnect();
 		} catch (Exception e) {
 			logger.error("ERROR: " + e.toString());
 			System.out.println("ERROR: " + e.toString());
@@ -185,8 +189,8 @@ public class App_KVClient extends Thread {
 			return;
 		}
 		try {
-			this.client.disconnect();
 			this.connected = false;
+			this.client.disconnect();
 			logger.info("Client Disconnected From Server");
 			System.out.println("Client Disconnected From Server");
 		} catch (Exception e) {
@@ -214,6 +218,7 @@ public class App_KVClient extends Thread {
 					serverPort.toString());
 			this.connected = true;
 			logger.info(connectMessage);
+			System.out.println(connectMessage);
 
 		} catch (UnknownHostException e) {
 			logger.error("Unknown Host: " + e.toString());
