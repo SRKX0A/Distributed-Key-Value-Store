@@ -30,6 +30,7 @@ public class KVServer extends Thread implements IKVServer {
 
     private File wal;
     private TreeMap<String, String> memtable;
+    private Object memtableLock;
 
     /**
 	* Start KV Server at given port
@@ -49,6 +50,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	this.wal = new File(this.directory, "wal.txt");
 	this.memtable = new TreeMap<String, String>();
+	this.memtableLock = new Object();
 
 	Scanner scanner = new Scanner(this.wal);
 	scanner.useDelimiter("\r\n");
@@ -155,6 +157,15 @@ public class KVServer extends Thread implements IKVServer {
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
 		    this.logger.info("Got key = " + key + " from storage with value = " + test_value);
+
+		    synchronized (this.memtableLock) {
+			this.memtable.put(test_key, test_value);
+			if (this.memtable.size() >= this.cacheSize) {
+			    this.dumpCacheToDisk();
+			}
+		    }
+
+		    scanner.close();
 		    return test_value;
 		}
 	    }
@@ -172,41 +183,46 @@ public class KVServer extends Thread implements IKVServer {
 	walWriter.write(String.format("%s\r\n%s\r\n", key, value));
 	walWriter.close();
 	
-	boolean presentInCache = this.inCache(key);
-	String previousValue = this.memtable.put(key, value);
-
 	StatusType response = StatusType.PUT_SUCCESS;
 
-	if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
-	    response = StatusType.PUT_UPDATE;
-	}
+	synchronized (this.memtableLock) {
+	    boolean presentInCache = this.inCache(key);
+	    String previousValue = this.memtable.put(key, value);
 
-	if (value.equals("null")) {
-	    response = StatusType.PUT_SUCCESS;
-	}
-
-	if (this.memtable.size() >= this.cacheSize) {
-
-	    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
-
-	    File dumpedFile = new File(this.directory, "KVServerStoreFile_" + timestamp + ".txt"); 
-	    dumpedFile.createNewFile();
-
-	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-	    for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
-		dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
+	    if (value.equals("null")) {
+		response = StatusType.PUT_SUCCESS;
+	    } else if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
+		response = StatusType.PUT_UPDATE;
 	    }
 
-	    dumpedWriter.close();
-
-	    new FileOutputStream(this.wal).close();
-
-	    this.memtable.clear();
-
+	    if (this.memtable.size() >= this.cacheSize) {
+		this.dumpCacheToDisk();
+	    }
 	}
 
 	return response;
 
+    }
+
+    public void dumpCacheToDisk() throws Exception {
+
+	this.logger.info("Dumping current cache contents to disk.");
+
+	String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
+
+	File dumpedFile = new File(this.directory, "KVServerStoreFile_" + timestamp + ".txt"); 
+	dumpedFile.createNewFile();
+
+	BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+	for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
+	    dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
+	}
+
+	dumpedWriter.close();
+
+	new FileOutputStream(this.wal).close();
+
+	this.memtable.clear();
     }
 
     @Override
