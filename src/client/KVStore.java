@@ -119,6 +119,10 @@ public class KVStore implements KVCommInterface {
 
 	}
 
+	if (cur_value == -1 && byteCount == 0) {
+	    throw new EOFException("EOF reached");
+	}
+
 	byte[] tmpBuf = new byte[byteCount];
 	System.arraycopy(msgBuf, 0, tmpBuf, 0, byteCount);
 	msgBuf = tmpBuf;

@@ -1,0 +1,6 @@
+*.log
+*.MF
+*.jar
+logs
+bin
+data

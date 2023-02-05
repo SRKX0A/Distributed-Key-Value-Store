@@ -12,6 +12,7 @@ import org.apache.log4j.Logger;
 
 import logger.LogSetup;
 import shared.messages.KVMessage;
+import shared.messages.KVMessage.StatusType;
 
 public class App_KVClient extends Thread {
 
@@ -30,15 +31,15 @@ public class App_KVClient extends Thread {
 	public void parser(String message) throws Exception {
 		String[] commands = message.split(" ");
 
-		switch (commands[0].toLowerCase()) {
+		switch (commands[0]) {
 			case "quit":
-				shutClientDown();
+				shutClientDown(commands);
 				break;
 			case "connect":
 				connectToServer(commands);
 				break;
 			case "disconnect":
-				disconnectFromServer();
+				disconnectFromServer(commands);
 				break;
 			case "put":
 				updateValue(commands);
@@ -49,47 +50,48 @@ public class App_KVClient extends Thread {
 			case "help":
 				helpMessage();
 				break;
-			case "loglevel":
+			case "logLevel":
 				setLogLevel(commands);
 				break;
 			default:
-				System.out.println("Unknown Command");
+				System.out.println("Unknown command");
+				helpMessage();
 
 		}
 	}
 
 	public void setLogLevel(String[] commands) throws Exception {
 		if (commands.length != 2) {
-			System.out.println("Invalid Number of Arguements");
+			System.out.println("Invalid Number of Arguments");
 			return;
 		}
 
-		switch (commands[1].toLowerCase()) {
-			case "all":
+		switch (commands[1]) {
+			case "ALL":
 				this.client.logLevel(Level.ALL);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "debug":
+			case "DEBUG":
 				this.client.logLevel(Level.DEBUG);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "info":
+			case "INFO":
 				this.client.logLevel(Level.INFO);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "warn":
+			case "WARN":
 				this.client.logLevel(Level.WARN);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "error":
+			case "ERROR":
 				this.client.logLevel(Level.ERROR);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "fatal":
+			case "FATAL":
 				this.client.logLevel(Level.FATAL);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
-			case "off":
+			case "OFF":
 				this.client.logLevel(Level.OFF);
 				System.out.println("Logger Level Set To: " + this.client.getLogLevel());
 				break;
@@ -104,6 +106,7 @@ public class App_KVClient extends Thread {
 		System.out.println("To Update Or Add KV Pair -> put <key> <value>");
 		System.out.println("To Get KV Pair ->  get <key>");
 		System.out.println("To Change LogLevel -> logLevel <level>");
+		System.out.println("To Quit -> quit");
 		System.out.println("For Help -> help");
 	}
 
@@ -114,14 +117,18 @@ public class App_KVClient extends Thread {
 				return;
 			}
 			if (commands.length != 2) {
-				System.out.println("Invalid Number of Arguements");
+				System.out.println("Invalid Number of Arguments");
 				return;
 			}
 			KVMessage message = this.client.get(commands[1]);
-			System.out.println(message.getValue() == null || message.getValue() == "null" ? "Error: Key Not Found" :message.getValue());
+			System.out.println((message.getValue() == null || message.getValue().equals("null")) ? "Error: Key Not Found" : message.getValue());
 
+		} catch (EOFException e) {
+		    logger.info("Server disconnected: " + e.toString());	
+		    System.out.println("Server disconnected: " + e.toString());	
 		} catch (Exception e) {
-			logger.error("FAILED: " + e.toString());
+			logger.error("ERROR: " + e.toString());
+			System.out.println("ERROR: " + e.toString());
 		}
 	}
 
@@ -132,7 +139,7 @@ public class App_KVClient extends Thread {
 				return;
 			}
 			if (commands.length < 3) {
-				System.out.println("Invalid Number of Arguements");
+				System.out.println("Invalid Number of Arguments");
 				return;
 			}
 
@@ -140,23 +147,39 @@ public class App_KVClient extends Thread {
 			System.arraycopy(commands, 2, value, 0, commands.length - 2); 
 			String result = String.join(" ", value);
 			KVMessage message = this.client.put(commands[1], result);
-			System.out.println("SUCCESS");
+			if (message.getStatus() == StatusType.PUT_SUCCESS || message.getStatus() == StatusType.PUT_UPDATE) {
+			    System.out.println("SUCCESS");
+			} else {
+			    System.out.println("ERROR");
+			}
 
+		} catch (EOFException e) {
+		    logger.info("Server disconnected: " + e.toString());	
+		    System.out.println("Server disconnected: " + e.toString());	
 		} catch (Exception e) {
-			logger.error("FAILED: " + e.toString());
+			logger.error("ERROR: " + e.toString());
+			System.out.println("ERROR: " + e.toString());
 		}
 	}
 
-	public void shutClientDown() throws Exception {
+	public void shutClientDown(String[] commands) throws Exception {
+		if (commands.length != 1) {
+		    System.out.println("Invalid Number of Arguments");
+		    return;
+		}
 		if (this.connected) {
-			disconnectFromServer();
+			disconnectFromServer(commands);
 		}
 		System.out.println("Client Shutting Down...");
 		TimeUnit.SECONDS.sleep(1);
 		System.exit(1);
 	}
 
-	public void disconnectFromServer() {
+	public void disconnectFromServer(String[] commands) {
+		if (commands.length != 1) {
+		    System.out.println("Invalid Number of Arguments");
+		    return;
+		}
 		if (!this.connected) {
 			System.out.println("Client currently not connected to a server");
 			return;
@@ -165,21 +188,23 @@ public class App_KVClient extends Thread {
 			this.client.disconnect();
 			this.connected = false;
 			logger.info("Client Disconnected From Server");
+			System.out.println("Client Disconnected From Server");
 		} catch (Exception e) {
 			logger.error("Disconnection Error: " + e.toString());
+			System.out.println("Disconnection Error: " + e.toString());
 		}
 	}
 
 	public void connectToServer(String[] commands) {
 		try {
+			if (commands.length != 3) {
+				System.out.println(
+						"Invalid Number of Arguments");
+				return;
+			}
 			if (this.connected) {
 				System.out.println(
 						"Client already Connected to Server. Please Disconnect First to Connect to another Server");
-				return;
-			}
-			if (commands.length != 3) {
-				System.out.println(
-						"Invalid Number of Arguements");
 				return;
 			}
 			String serverAddress = commands[1];
@@ -192,42 +217,37 @@ public class App_KVClient extends Thread {
 
 		} catch (UnknownHostException e) {
 			logger.error("Unknown Host: " + e.toString());
+			System.out.println("Unknown Host: " + e.toString());
 		} catch (NumberFormatException e) {
-			logger.error("Invalid Port Input " + e.toString());
+			logger.error("Invalid Port Input: " + e.toString());
+			System.out.println("Invalid Port Input: " + e.toString());
 		} catch (Exception e) {
 			logger.error("Connection error: " + e.toString());
+			System.out.println("Connection error: " + e.toString());
 		}
 	}
 
 	public void start() {
 
 		try {
-			// this.client.newConnection("localhost", 11002);
 			System.out.println("Client Has Started. Enter 'Help' For More Information");
 			Scanner s = new Scanner(System.in);
 			s.useDelimiter("\n");
 			while (this.running) {
-				// String key = s.next();
-				// String value = s.next();
-
-				// if (value.equals("g")) {
-				// this.client.get(key);
-				// } else {
-				// this.client.put(key, value);
-				// }
 				System.out.print(">>> ");
 				parser(s.next());
 
 			}
 		} catch (Exception e) {
 			logger.error("Connection error: " + e.toString());
+			System.out.println("Connection error: " + e.toString());
 		}
 
 	}
 
 	public static void main(String[] args) {
 		try {
-			new LogSetup("logs/client.log", Level.ALL);
+			new LogSetup("logs/client.log", Level.OFF);
 			new App_KVClient().start();
 		} catch (IOException e) {
 			System.out.println("Error! Unable to initialize logger!");
