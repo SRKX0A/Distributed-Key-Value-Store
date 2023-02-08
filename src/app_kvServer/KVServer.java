@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Calendar;
 import java.util.Scanner;
 import java.text.SimpleDateFormat;
@@ -108,6 +109,7 @@ public class KVServer extends Thread implements IKVServer {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
+		    scanner.close();
 		    if (test_value.equals("null")) {
 			return false;
 		    } else {
@@ -131,7 +133,7 @@ public class KVServer extends Thread implements IKVServer {
     public String getKV(String key) throws Exception {
 
 	if (this.memtable.containsKey(key)) {
-	    this.logger.info("Got key = " + key + " from cache with value = " + this.memtable.get(key));
+	    logger.info("Got key = " + key + " from cache with value = " + this.memtable.get(key));
 	    return this.memtable.get(key);
 	}
 
@@ -156,7 +158,7 @@ public class KVServer extends Thread implements IKVServer {
 		String test_key = scanner.next();
 		String test_value = scanner.next();
 		if (key.equals(test_key)) {
-		    this.logger.info("Got key = " + key + " from storage with value = " + test_value);
+		    logger.info("Got key = " + key + " from storage with value = " + test_value);
 
 		    synchronized (this.memtableLock) {
 			this.memtable.put(test_key, test_value);
@@ -206,7 +208,7 @@ public class KVServer extends Thread implements IKVServer {
 
     public void dumpCacheToDisk() throws Exception {
 
-	this.logger.info("Dumping current cache contents to disk.");
+	logger.info("Dumping current cache contents to disk.");
 
 	String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
 
@@ -223,6 +225,90 @@ public class KVServer extends Thread implements IKVServer {
 	new FileOutputStream(this.wal).close();
 
 	this.memtable.clear();
+    }
+
+    public void compactLogs() throws Exception {
+
+	logger.info("Compacting logs.");
+
+	HashSet<String> keySet = new HashSet<String>();
+
+	File store_dir = new File(this.directory);
+
+	File[] store_files = store_dir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("KVServerStoreFile_");
+	    }
+	});
+
+	Arrays.sort(store_files, new Comparator<File>() {
+	    public int compare(File f1, File f2) {
+		return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
+	    }
+	});
+
+	String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
+	File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
+	dumpedFile.createNewFile();
+	BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+	int keyCount = 0;
+
+	for (File file: store_files) {
+	    Scanner scanner = new Scanner(file);
+	    scanner.useDelimiter("\r\n");
+	    while (scanner.hasNext()) {
+		String test_key = scanner.next();
+		String test_value = scanner.next();
+
+		if (!keySet.contains(test_key)) {
+		    keySet.add(test_key); 
+		    dumpedWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
+		    keyCount++;
+
+		    if (keyCount >= this.cacheSize) {
+			dumpedWriter.close();	
+			timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
+			dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
+			dumpedFile.createNewFile();
+			dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+			keyCount = 0;
+		    }
+
+		}
+	    }
+	    scanner.close();
+	}
+
+    }
+
+    public void clearOldLogs() throws Exception {
+
+	logger.info("Clearing old logs.");
+
+	File store_dir = new File(this.directory);
+
+	File[] store_files = store_dir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("KVServerStoreFile_");
+	    }
+	});
+
+	for (File file: store_files) {
+	    file.delete();
+	}
+
+	File[] compacted_files = store_dir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("CompactedKVServerStoreFile_");
+	    }
+	});
+
+	for (File file: compacted_files) {
+	    String filename = file.getName();
+	    File newFile = new File(filename.substring(0, 9));
+	    file.renameTo(newFile);
+	}
+
     }
 
     @Override
