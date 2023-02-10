@@ -11,6 +11,7 @@ public class App_KVServer {
 
     public static void main(String[] args) {
 
+	Option bootstrapOption = Option.builder("b").desc("bootstrap server location as <address>:<port>").hasArg().required().type(String.class).build();
 	Option portOption = Option.builder("p").desc("port which server listens on").hasArg().required().type(String.class).build();
 	Option cacheSizeOption = Option.builder("c").desc("sets cache size on server").hasArg().type(String.class).build();
 	Option addressOption = Option.builder("a").desc("address which server listens to").hasArg().type(String.class).build();
@@ -20,6 +21,7 @@ public class App_KVServer {
 	Option helpOption = Option.builder("h").desc("displays help message").build();
 	
 	Options options = new Options();	
+	options.addOption(bootstrapOption);
 	options.addOption(portOption);
 	options.addOption(cacheSizeOption);
 	options.addOption(addressOption);
@@ -37,6 +39,8 @@ public class App_KVServer {
 	    System.exit(1);
 	}
 
+	String bootstrapAddress = null;
+	int bootstrapPort = 0;
 	int port = 0;
 	int cacheSize = 100;
 	String address = "localhost";
@@ -44,6 +48,14 @@ public class App_KVServer {
 	String logPath = "server.log";
 	Level logLevel = Level.ALL;
 
+	try {
+	    String bootstrap = cmd.getOptionValue("b");  
+	    bootstrapAddress = bootstrap.substring(0, bootstrap.indexOf(':'));
+	    bootstrapPort = (int) Integer.parseInt(bootstrap.substring(bootstrap.indexOf(':') + 1));
+	} catch (Exception e) {
+	    System.err.println("Parsing failed. Reason: " + e.getMessage());
+	    System.exit(1);
+	}
 
 	try {
 	    port = (int) Integer.parseInt(cmd.getOptionValue("p"));
@@ -89,7 +101,7 @@ public class App_KVServer {
 	    File wal = new File(directory, "wal.txt");
 	    wal.createNewFile();
 
-	    new KVServer(address, port, directory, cacheSize).start();
+	    new KVServer(address, port, bootstrapAddress, bootstrapPort, directory, cacheSize).start();
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(1);
