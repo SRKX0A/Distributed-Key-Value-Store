@@ -469,6 +469,32 @@ public class KVServer extends Thread implements IKVServer {
         return this.ecsPort;
     }
 
+    public String getKeyRangeSuccessString() {
+
+	StringBuilder sb = new StringBuilder();
+	sb.append("keyrange_success ");
+
+	for (var entry: this.metadata.entrySet()) {
+	    KeyRange nodeRange = entry.getValue();
+	    for (var b: nodeRange.getRangeFrom()) {
+		sb.append(String.format("%02x", b));
+	    }
+	    sb.append(",");
+	    for (var b: nodeRange.getRangeTo()) {
+		sb.append(String.format("%02x", b));
+	    }
+	    sb.append(",");
+	    sb.append(nodeRange.getAddress());
+	    sb.append(":");
+	    sb.append(Integer.toString(nodeRange.getPort()));
+	    sb.append(";");
+	}
+
+	sb.append("\r\n");
+	
+	return sb.toString();
+    }
+
     @Override
     public void run() {
 

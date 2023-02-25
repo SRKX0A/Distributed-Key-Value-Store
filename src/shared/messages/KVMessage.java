@@ -14,6 +14,8 @@ public interface KVMessage {
 		DELETE_ERROR, 	/* Delete - request successful */
 		FAILED,
 
+		KEYRANGE,
+		KEYRANGE_SUCCESS,
 		SERVER_STOPPED,
 		SERVER_WRITE_LOCK,
 		SERVER_NOT_RESPONSIBLE,

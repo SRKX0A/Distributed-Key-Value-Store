@@ -81,14 +81,17 @@ public class ECSConnection extends Thread {
 
 	this.kvServer.setMetadata(message.getMetadata());
 
-	if (this.kvServer.getHostname().equals(address) && this.kvServer.getPort() == port) {
-	    logger.debug("Got initial metadata update from ECS, turning state to available");
-	    this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
+	if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
+	    if (this.kvServer.getHostname().equals(address) && this.kvServer.getPort() == port) {
+		logger.debug("Got initial metadata update from ECS, turning state to available");
+		this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
+	    } else {
+		logger.debug("Got metadata update from ECS");
+	    }
 	} else {
 	    logger.debug("Got metadata update from ECS");
+	    this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
 	}
-
-	this.kvServer.printMetadata();
 
     }
 

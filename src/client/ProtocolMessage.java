@@ -27,6 +27,9 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String msgString = new String(buf, StandardCharsets.UTF_8);
 
+	if (msgString.equals("keyrange\r\n")) {
+	    return new ProtocolMessage(StatusType.KEYRANGE, null, null);
+	}
 
 	int indexOfFirstSpace = msgString.indexOf(" ");
 
@@ -111,6 +114,8 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = StatusType.GET_ERROR;
 	} else if (status.toLowerCase().equals("failed")) {
 	    protocolStatus = StatusType.FAILED;
+	} else if (status.toLowerCase().equals("keyrange_success")) {
+	    protocolStatus = StatusType.KEYRANGE_SUCCESS;
 	} else {
 	    throw new IllegalArgumentException("Error: Malformed StatusType response from server");
 	}
@@ -148,6 +153,17 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
+	} else if (protocolStatus == StatusType.KEYRANGE_SUCCESS) {
+
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (!key.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message from server");
+	    }
+
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
+
 	} else {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);
@@ -166,9 +182,15 @@ public class ProtocolMessage implements Serializable, KVMessage {
     }
 
     public byte[] getBytes() throws Exception {
-	String msgString = this.status.toString() + " " + this.key + " " + this.value + "\r\n";
-	byte[] msgBytes = msgString.getBytes("UTF-8");
-	return msgBytes;
+
+	if (this.status == StatusType.KEYRANGE_SUCCESS) {
+	    String msgString = this.status + " " + this.key + "\r\n";     
+	    return msgString.getBytes("UTF-8");
+	} else {
+	    String msgString = this.status.toString() + " " + this.key + " " + this.value + "\r\n";
+	    return msgString.getBytes("UTF-8");
+	}
+
     }
 
     public String getKey() {

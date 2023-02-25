@@ -2,10 +2,12 @@ package app_kvServer;
 
 import java.io.*;
 import java.net.*;
+import java.security.*;
 
 import org.apache.log4j.Logger;
 
 import client.ProtocolMessage;
+import shared.KeyRange;
 import shared.messages.KVMessage;
 import shared.messages.KVMessage.StatusType;
 
@@ -40,10 +42,17 @@ public class Connection extends Thread {
 
 		ProtocolMessage request = this.receiveMessage();
 
+		if (this.kvServer.getServerState() != KVServer.ServerState.SERVER_AVAILABLE) {
+		    this.sendMessage(StatusType.SERVER_STOPPED, null, null);
+		    continue;
+		}
+
 		if (request.getStatus() == StatusType.PUT) {
 		    this.handlePutRequest(request);
 		} else if (request.getStatus() == StatusType.GET) {
 		    this.handleGetRequest(request); 
+		} else if (request.getStatus() == StatusType.KEYRANGE) {
+		    this.handleKeyrangeRequest(request);
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}
@@ -64,6 +73,19 @@ public class Connection extends Thread {
 
     public void handlePutRequest(KVMessage request) throws Exception {
 	try {
+
+	    if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_REBALANCING) {
+		this.sendMessage(StatusType.SERVER_WRITE_LOCK, null, null);
+		return;
+	    }
+
+	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
+
+	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
+		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, null, null);
+		return;
+	    }
+
 	    StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
 	    this.sendMessage(response_status, request.getKey(), request.getValue());
 	} catch (Exception e) {
@@ -74,6 +96,13 @@ public class Connection extends Thread {
 
     public void handleGetRequest(KVMessage request) throws Exception {
 	try {
+
+	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
+
+	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
+		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, null, null);
+		return;
+	    }
 
 	    String value = this.kvServer.getKV(request.getKey());
 
@@ -86,6 +115,15 @@ public class Connection extends Thread {
 	} catch (Exception e) {
 	    logger.error("Failure to handle GET request: " + e.toString());
 	    this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
+	}
+    }
+
+    public void handleKeyrangeRequest(KVMessage request) throws Exception {
+	try {
+	    this.sendMessage(StatusType.KEYRANGE_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
+	} catch (Exception e) {
+	    logger.error("Failure to handle KEYRANGE request: " + e.toString());
+	    this.sendMessage(StatusType.SERVER_STOPPED, null, null);
 	}
     }
 
@@ -174,6 +212,28 @@ public class Connection extends Thread {
 	this.output.write(response.getBytes());
 	this.output.flush();
 
-	logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
+	logger.info(String.format("Sent protocol message: status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }
+
+    private byte[] hashIP(String address, int port) {
+	try {
+	    String valueToHash = address + ":" + Integer.toString(port);	
+	    MessageDigest md = MessageDigest.getInstance("MD5");
+	    md.update(valueToHash.getBytes());
+	    return md.digest();
+	} catch (Exception e) {
+	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
+	}
+    }
+
+    private byte[] hashKey(String key) {
+	try {;	
+	    MessageDigest md = MessageDigest.getInstance("MD5");
+	    md.update(key.getBytes());
+	    return md.digest();
+	} catch (Exception e) {
+	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
+	}
+    }
+
 }
