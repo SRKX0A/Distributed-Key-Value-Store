@@ -41,66 +41,83 @@ public class Connection extends Thread {
 		ProtocolMessage request = this.receiveMessage();
 
 		if (request.getStatus() == StatusType.PUT) {
-		    try {
-			StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
-			this.sendMessage(response_status, request.getKey(), request.getValue());
-		    } catch (Exception e) {
-			this.logger.error("Failure in handling PUT request: " + e.toString());
-			this.sendMessage(StatusType.PUT_ERROR, request.getKey(), request.getValue());
-		    }
+		    this.handlePutRequest(request);
 		} else if (request.getStatus() == StatusType.GET) {
-		    
-		    try {
-
-			String value = this.kvServer.getKV(request.getKey());
-
-			if (value.equals("null")) {
-			    this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
-			} else {
-			    this.sendMessage(StatusType.GET_SUCCESS, request.getKey(), value);
-			}
-		    	
-		    } catch (Exception e) {
-			this.logger.error("Failure to handle GET request: " + e.toString());
-			this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
-		    }
+		    this.handleGetRequest(request); 
 		} else {
-		    
-		    this.logger.error("Client message format failure: Invalid request status.");
-		    this.sendMessage(StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
-
+		    this.handleInvalidMessageRequestType();
 		}
 
 	    } catch (IllegalArgumentException iae) {
-		this.logger.error("Client message format failure: " + iae.toString());
-
-		try {
-		    this.sendMessage(StatusType.FAILED, iae.toString(), iae.toString());
-		} catch (Exception e) {
-		    this.logger.error("Failed to send failure message: " + e.toString()); 
-		}
-
+		this.handleIllegalArgumentException(iae);
 	    } catch (EOFException eofe) {
-		this.logger.info("Client connection closed: " + eofe.toString());
+		this.handleEOFException(eofe);
 		return;
-	    } 
-	    catch(Exception e) {
-		this.logger.info("Client connection failure: " + e.toString());
-
-		try {
-		    this.output.close();
-		    this.input.close();
-		    this.socket.close();
-		} catch (IOException ioe) {
-		    this.logger.error("Failed to gracefully close connection: " + ioe.toString()); 
-		}
-
+	    } catch(Exception e) {
+		this.handleGeneralException(e);
 		return;
-
 	    } 
 
 	}
 
+    }
+
+    public void handlePutRequest(KVMessage request) throws Exception {
+	try {
+	    StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
+	    this.sendMessage(response_status, request.getKey(), request.getValue());
+	} catch (Exception e) {
+	    logger.error("Failure in handling PUT request: " + e.toString());
+	    this.sendMessage(StatusType.PUT_ERROR, request.getKey(), request.getValue());
+	}
+    }
+
+    public void handleGetRequest(KVMessage request) throws Exception {
+	try {
+
+	    String value = this.kvServer.getKV(request.getKey());
+
+	    if (value.equals("null")) {
+		this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
+	    } else {
+		this.sendMessage(StatusType.GET_SUCCESS, request.getKey(), value);
+	    }
+
+	} catch (Exception e) {
+	    logger.error("Failure to handle GET request: " + e.toString());
+	    this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
+	}
+    }
+
+    public void handleInvalidMessageRequestType() throws Exception {
+	logger.error("Client message format failure: Invalid request status.");
+	this.sendMessage(StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
+    }
+
+    public void handleIllegalArgumentException(IllegalArgumentException iae) {
+	logger.error("Client message format failure: " + iae.toString());
+
+	try {
+	    this.sendMessage(StatusType.FAILED, iae.toString(), iae.toString());
+	} catch (Exception e) {
+	    logger.error("Failed to send failure message: " + e.toString()); 
+	}
+    }
+
+    public void handleEOFException(EOFException eofe) {
+	logger.info("Client connection closed: " + eofe.toString());
+    }
+
+    public void handleGeneralException(Exception e) {
+	logger.info("Client connection failure: " + e.toString());
+
+	try {
+	    this.output.close();
+	    this.input.close();
+	    this.socket.close();
+	} catch (IOException ioe) {
+	    logger.error("Failed to gracefully close connection: " + ioe.toString()); 
+	}
     }
 
     private ProtocolMessage receiveMessage() throws IllegalArgumentException, IOException, Exception {
@@ -146,7 +163,7 @@ public class Connection extends Thread {
 
 	ProtocolMessage request = ProtocolMessage.fromBytesAtServer(msgBuf);
 
-	this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
+	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
 
 	return request;
     }
@@ -157,6 +174,6 @@ public class Connection extends Thread {
 	this.output.write(response.getBytes());
 	this.output.flush();
 
-	this.logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
+	logger.info(String.format("Sent protocol message: PUT response with status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }
 }
