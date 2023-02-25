@@ -22,10 +22,8 @@ public class ECS extends Thread {
 
     private int numNodes; 
 
-    private TreeMap<byte[], KeyRange> metadata;
-    private HashMap<byte[], ECSClientConnection> connections;
-
-    private volatile boolean rebalancePending;
+    private volatile TreeMap<byte[], KeyRange> metadata;
+    private volatile HashMap<byte[], ECSClientConnection> connections;
 
     public ECS(String address, int port) {
 

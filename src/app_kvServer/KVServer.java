@@ -40,7 +40,7 @@ public class KVServer extends Thread implements IKVServer {
     private TreeMap<String, String> memtable;
     private Object memtableLock;
 
-    private TreeMap<byte[], KeyRange> metadata;
+    private volatile TreeMap<byte[], KeyRange> metadata;
 
     /**
     * Start KV Server at given port
@@ -133,7 +133,7 @@ public class KVServer extends Thread implements IKVServer {
 		System.out.print(String.format("%x", b));
 	    }
 	    System.out.print(", RangeTo: ");
-	    for (var b: nodeRange.getRangeFrom()) {
+	    for (var b: nodeRange.getRangeTo()) {
 		System.out.print(String.format("%x", b));
 	    }
 	    System.out.println();

@@ -13,6 +13,17 @@ import shared.messages.ECSMessage.StatusType;
 
 public class ECSClientConnection extends Thread {
 
+    public class RequestPendingInfo {
+	private String pendingAddress;
+	private int pendingPort;
+
+	public RequestPendingInfo(String pendingAddress, int pendingPort) {
+	    this.pendingAddress = pendingAddress;
+	    this.pendingPort = pendingPort;
+	}
+
+    }
+
     private static Logger logger = Logger.getRootLogger();
 
     private ECS ecs;
@@ -21,12 +32,16 @@ public class ECSClientConnection extends Thread {
     private ObjectInputStream input;
     private ObjectOutputStream output;
 
+    private RequestPendingInfo info;
+
     public ECSClientConnection(Socket socket, ECS ecs) throws IOException {
 	this.ecs = ecs;
 
 	this.socket = socket;
 	this.output = new ObjectOutputStream(this.socket.getOutputStream());
 	this.input = new ObjectInputStream(this.socket.getInputStream());
+
+	this.info = null;
     }
 
     @Override 
@@ -37,6 +52,11 @@ public class ECSClientConnection extends Thread {
 	    try {
 
 		ECSMessage request = this.receiveMessage();
+
+		if (request.getStatus() == StatusType.REQ_FIN) {
+		    this.handleRebalance(request);
+		    continue;
+		}
 
 		synchronized (ECSClientConnection.class) {
 
@@ -98,6 +118,7 @@ public class ECSClientConnection extends Thread {
 	HashMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
 
 	try {
+	    connections.get(successorRingPosition).info = new RequestPendingInfo(address, port);
 	    connections.get(successorRingPosition).sendMessage(StatusType.METADATA_LOCK, address, port, updatedMetadata, successorRingPosition);
 	} catch (Exception e) {
 	    logger.error("Failed to send write lock message to successor: " + e.getMessage());
@@ -105,22 +126,6 @@ public class ECSClientConnection extends Thread {
 	    this.sendUpdateMessageToAllNodes(address, port);
 	    return;
 	}
-
-	ECSMessage writeLockResponse = null;
-
-	try {
-	    writeLockResponse = connections.get(successorRingPosition).receiveMessage(); 
-	    if (writeLockResponse.getStatus() != StatusType.REQ_FIN) {
-		throw new IllegalArgumentException("Expecting REQ_FIN message");	
-	    }
-	} catch (Exception e) {
-	    logger.error("Failed to receive write lock response from successor: " + e.getMessage());
-	    this.removeNodeFromECSAndConnectionList(successorNodeRange);
-	    this.sendUpdateMessageToAllNodes(address, port);
-	    return;
-	}
-
-	this.sendUpdateMessageToAllNodes(address, port);
 
     }
 
@@ -163,6 +168,17 @@ public class ECSClientConnection extends Thread {
 
     }
 
+    public void handleRebalance(ECSMessage message) throws Exception {
+
+	if (this.info == null) {
+	    throw new IllegalStateException("REQ_FIN request for connection that has not requested a rebalance!");
+	}
+
+	this.sendUpdateMessageToAllNodes(this.info.pendingAddress, this.info.pendingPort);
+	this.info = null;	
+
+    }
+
     public void handleIllegalArgumentException(IllegalArgumentException iae) {
 	
 	logger.error("Client message format failure: " + iae.toString());
@@ -200,6 +216,17 @@ public class ECSClientConnection extends Thread {
 	    byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
 	    this.ecs.getConnections().remove(hashedValue);
 	    this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+
+	    String sentAddress = this.socket.getInetAddress().getHostName();
+	    int sentPort = this.socket.getPort();
+
+	    if (this.info != null) {
+		sentAddress = this.info.pendingAddress;
+		sentPort = this.info.pendingPort;
+	    }
+
+	    this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
+
 	}
 
     }
@@ -217,6 +244,16 @@ public class ECSClientConnection extends Thread {
 	    byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
 	    this.ecs.getConnections().remove(hashedValue);
 	    this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+
+	    String sentAddress = this.socket.getInetAddress().getHostName();
+	    int sentPort = this.socket.getPort();
+
+	    if (this.info != null) {
+		sentAddress = this.info.pendingAddress;
+		sentPort = this.info.pendingPort;
+	    }
+
+	    this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
 	}
 
     }
@@ -227,6 +264,7 @@ public class ECSClientConnection extends Thread {
 
 	this.output.writeObject(response);
 	this.output.flush();
+	this.output.reset();
 
 	logger.debug(String.format("ECS sent response with status = %s\n", response.getStatus()));
 
