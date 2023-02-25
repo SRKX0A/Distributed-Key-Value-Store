@@ -7,6 +7,8 @@ import shared.KeyRange;
 
 public class ECSMessage implements Serializable {
 
+    private static final long serialVersionUID = 0x419;
+
     public enum StatusType {
 	INIT_REQ,
 	TERM_REQ,
@@ -22,7 +24,7 @@ public class ECSMessage implements Serializable {
 	this.address = address;
 	this.port = port;
 	this.metadata = metadata;
-	this.ringPosition= ringPosition;
+	this.ringPosition = ringPosition;
     }
 
     private StatusType status;

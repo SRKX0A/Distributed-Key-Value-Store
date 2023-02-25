@@ -1,8 +1,9 @@
 package shared;
 
+import java.io.*;
 import java.math.BigInteger;
 
-public class KeyRange {
+public class KeyRange implements Serializable {
 
     String address;
     int port;

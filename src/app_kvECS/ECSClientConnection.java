@@ -18,15 +18,15 @@ public class ECSClientConnection extends Thread {
     private ECS ecs;
 
     private Socket socket;
-    private InputStream input;
-    private OutputStream output;
+    private ObjectInputStream input;
+    private ObjectOutputStream output;
 
     public ECSClientConnection(Socket socket, ECS ecs) throws IOException {
 	this.ecs = ecs;
 
 	this.socket = socket;
-	this.input = this.socket.getInputStream();
-	this.output = this.socket.getOutputStream();
+	this.output = new ObjectOutputStream(this.socket.getOutputStream());
+	this.input = new ObjectInputStream(this.socket.getInputStream());
     }
 
     @Override 
@@ -39,10 +39,6 @@ public class ECSClientConnection extends Thread {
 		ECSMessage request = this.receiveMessage();
 
 		synchronized (ECSClientConnection.class) {
-
-		    if (!this.ecs.getConnections().containsValue(this)) {
-			return;
-		    }
 
 		    if (request.getStatus() == StatusType.INIT_REQ) {
 			this.handleInitialization(request);
@@ -83,6 +79,7 @@ public class ECSClientConnection extends Thread {
 	int port = request.getPort();
 
 	KeyRange serverKeyRange = this.ecs.addNode(address, port);
+	this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
 	TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
 
 	if (this.ecs.getNumNodes() == 1) {
@@ -227,10 +224,9 @@ public class ECSClientConnection extends Thread {
     public void sendMessage(StatusType status, String address, int port, TreeMap<byte[], KeyRange> metadata, byte[] ringPosition) throws Exception {
 
 	ECSMessage response = new ECSMessage(status, address, port, metadata, ringPosition);
-	ObjectOutputStream oos = new ObjectOutputStream(this.output);
 
-	oos.writeObject(response);
-	oos.flush();
+	this.output.writeObject(response);
+	this.output.flush();
 
 	logger.debug(String.format("ECS sent response with status = %s\n", response.getStatus()));
 
@@ -240,8 +236,7 @@ public class ECSClientConnection extends Thread {
 
     public ECSMessage receiveMessage() throws Exception {
 	
-	ObjectInputStream ois = new ObjectInputStream(this.input);
-	ECSMessage request = (ECSMessage) ois.readObject();
+	ECSMessage request = (ECSMessage) this.input.readObject();
 
 	logger.debug(String.format("ECS received request from node <%s:%d> with status = %s\n", request.getAddress(), request.getPort(), request.getStatus()));
 
@@ -259,6 +254,7 @@ public class ECSClientConnection extends Thread {
 
 	    byte[] ringPosition = entry.getKey(); 
 	    ECSClientConnection connection = entry.getValue();
+
 	    KeyRange nodeRange = this.ecs.getMetadata().get(ringPosition);
 
 	    try {

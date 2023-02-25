@@ -8,6 +8,7 @@ import java.security.*;
 import org.apache.log4j.Logger;
 
 import shared.KeyRange;
+import shared.ByteArrayComparator;
 
 public class ECS extends Thread {
 
@@ -24,10 +25,13 @@ public class ECS extends Thread {
     private TreeMap<byte[], KeyRange> metadata;
     private HashMap<byte[], ECSClientConnection> connections;
 
+    private volatile boolean rebalancePending;
+
     public ECS(String address, int port) {
 
 	this.numNodes = 0;
-	this.metadata = new TreeMap<byte[], KeyRange>();
+	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
+
 	this.connections = new HashMap<byte[], ECSClientConnection>();
 
 	logger.info("ECS starting...");
@@ -143,7 +147,6 @@ public class ECS extends Thread {
             try {
                 Socket client = this.socket.accept();
 		ECSClientConnection connection = new ECSClientConnection(client, this);
-		this.connections.put(this.hashIP(client.getInetAddress().getHostName(), client.getLocalPort()), connection);
 		connection.start();
                 logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
             } catch (SocketException e) {
