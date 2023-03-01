@@ -116,6 +116,8 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = StatusType.FAILED;
 	} else if (status.toLowerCase().equals("keyrange_success")) {
 	    protocolStatus = StatusType.KEYRANGE_SUCCESS;
+	} else if (status.toLowerCase().equals("server_not_responsible")){
+	    protocolStatus = StatusType.SERVER_NOT_RESPONSIBLE;	
 	} else {
 	    throw new IllegalArgumentException("Error: Malformed StatusType response from server");
 	}
@@ -164,6 +166,16 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
+	} else if (protocolStatus == StatusType.SERVER_NOT_RESPONSIBLE){ 
+    	    String key = msgString.substring(indexOfFirstSpace+1);
+
+	    if(!key.endsWith("\r\n")){
+	    	throw new IllegalArgumentException("Error: Malformed message from server");
+	    }
+
+	    protocolKey = key.substring(0,key.length()-2);
+	    protocolValue = "null";
+	
 	} else {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);

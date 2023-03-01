@@ -3,6 +3,7 @@ package app_kvServer;
 import java.io.*;
 import java.net.*;
 import java.security.*;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
@@ -85,6 +86,8 @@ public class Connection extends Thread {
 		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, null, null);
 		return;
 	    }
+	    
+	    //this.kvServer.printMetadata();
 
 	    StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
 	    this.sendMessage(response_status, request.getKey(), request.getValue());
@@ -101,6 +104,8 @@ public class Connection extends Thread {
 
 	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
 		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, null, null);
+		
+	
 		return;
 	    }
 
@@ -204,6 +209,46 @@ public class Connection extends Thread {
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", request.getStatus(), request.getKey(), request.getValue())); 
 
 	return request;
+    }
+
+
+    private void stringifyMetadata(StatusType status) throws Exception{
+    
+    	TreeMap<byte[],KeyRange> meta = this.kvServer.getMetadata();
+	
+	//ProtocolMessage response = new ProtocolMessage(status, "METADATA_BEGIN","null");
+	String value = "";
+	String key = "";
+	for(var entry: meta.entrySet()){
+		var ringPos = entry.getKey();
+		var nodeRange = entry.getValue();
+	   
+	   key += String.format(" Addr+Port: <%s:%d>, ", nodeRange.getAddress(), nodeRange.getPort());
+	   //System.out.println("METADATA BEGIN");
+	   value += "From: ";
+
+	   for(var b: nodeRange.getRangeFrom()){
+	   	
+		//String key = String.format(", Addr+Port: <%s:%d>, RangeFrom: ", nodeRange.getAddress(), nodeRange.getPort());
+		System.out.print(String.format("%x",b));
+		value += String.format("%x", b); 
+		//response = new ProtocolMessage(status,key,value);
+	   }
+		
+	  // response = new ProtocolMessage(status,"null",value);
+	   value += " To: ";
+	   for(var b: nodeRange.getRangeTo()){
+		System.out.print(String.format("%x",b));
+	   	value+= String.format("%x", b);
+	   }
+	   //response = new ProtocolMessage(status, "null", value);
+	   System.out.println();
+	   value+=", ";
+	}
+	System.out.println("METADATA Ends");
+	ProtocolMessage done = new ProtocolMessage(status, key,value);
+	this.sendMessage(done.getStatus(),done.getKey(),done.getValue());
+		
     }
 
     private void sendMessage(StatusType status, String key, String value) throws Exception {

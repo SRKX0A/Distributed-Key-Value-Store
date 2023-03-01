@@ -2,10 +2,13 @@ package client;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
+import shared.KeyRange;
 import shared.messages.KVMessage;
+import shared.messages.KVMessage.StatusType;
 
 public class KVStore implements KVCommInterface {
 
@@ -62,10 +65,11 @@ public class KVStore implements KVCommInterface {
 	    this.logger.info("Sent protocol message: Put request with key = " + key + ", value = " + value); 
 
 	    ProtocolMessage put_reply = this.receiveMessage();
-
+	    
 	    this.logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", put_reply.getStatus(), put_reply.getKey(), put_reply.getValue())); 
-
+	   
 	    return put_reply;
+	   
 	}
 
     @Override
@@ -85,6 +89,14 @@ public class KVStore implements KVCommInterface {
 
 	return get_reply;
     }
+    
+    public void askMetadata(String key) throws Exception{
+    
+	byte[] askb = key.getBytes("UTF-8");
+	this.output.write(askb);
+	this.output.flush();
+	this.logger.info(String.format("Asked for metadata for key: %s", key));
+    } 
 
     public ProtocolMessage receiveMessage() throws Exception {
 
