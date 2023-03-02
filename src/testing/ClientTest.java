@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.*;
 import java.util.Arrays;
 
+import app_kvECS.ECS;
 import app_kvServer.KVServer;
 import app_kvClient.KVClient;
 import client.KVStore;
@@ -20,8 +21,24 @@ public class ClientTest extends TestCase {
 
     private KVClient kvClient;
     private KVServer kvServer;
+    private ECS ecs;
 
     public void setUp() {
+
+	try {
+	    ecs = new ECS("localhost", 0); 
+	    ecs.start();
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
+
+	try {
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
 	try {
 	    (new File("src/testing/data")).mkdirs();
@@ -32,14 +49,19 @@ public class ClientTest extends TestCase {
 	}
 
 	try {
-	    kvServer = new KVServer("localhost", 0, "src/testing/data", 3);
+	    kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
 	    kvServer.start();
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
 	}
 
-	while (!kvServer.isOnline() && !kvServer.isFinished());
+	try {
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
 	kvClient = new KVClient();
 
@@ -49,13 +71,13 @@ public class ClientTest extends TestCase {
 
 	kvClient.disconnect();
 	kvServer.close();
+	ecs.close();
 	
 	File[] testing_data = (new File("src/testing/data")).listFiles();
 
 	for (File f: testing_data) {
 	    f.delete();
 	}
-
     }
 
 

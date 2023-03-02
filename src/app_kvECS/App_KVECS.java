@@ -63,8 +63,9 @@ public class App_KVECS {
 
             new ECS(address, port).start();
 
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException ioe) {
+	    System.err.println("Could not set up ECS: " + ioe.getMessage());
+            ioe.printStackTrace();
             System.exit(1);
         } catch (NumberFormatException nfe) {
             System.out.println("Error! Invalid argument <port>! Not a number!");

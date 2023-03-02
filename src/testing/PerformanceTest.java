@@ -5,6 +5,7 @@ import java.net.*;
 import java.text.MessageFormat;
 import java.util.Random;
 
+import app_kvECS.ECS;
 import app_kvServer.KVServer;
 import client.KVStore;
 import client.ProtocolMessage;
@@ -20,11 +21,27 @@ public class PerformanceTest extends TestCase {
 
     private KVStore kvClient;
     private KVServer kvServer;
+    private ECS ecs;
     private float iterations = 1000;
 
     private Random random = new Random();
 
     public void setUp() {
+
+	try {
+	    ecs = new ECS("localhost", 0); 
+	    ecs.start();
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
+
+	try {
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
         removeFiles();
         try {
@@ -36,29 +53,35 @@ public class PerformanceTest extends TestCase {
         }
 
         try {
-            kvServer = new KVServer("localhost", 11002, "src/testing/data", 10);
+            kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 10);
             kvServer.start();
         } catch (Exception e) {
             e.printStackTrace();
             return;
         }
 
-        while (!kvServer.isOnline() && !kvServer.isFinished());
+	try {
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
         kvClient = new KVStore("localhost", kvServer.getPort());
 
-        try {
-			kvClient.connect();
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
-		}
+	try {
+	    kvClient.connect();
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
     }
 
     public void tearDown() {
 
-        kvServer.close();
         kvClient.disconnect();
+        kvServer.close();
+	ecs.close();
         //removeFiles();
 
     }

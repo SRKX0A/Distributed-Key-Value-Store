@@ -16,16 +16,14 @@ public class ECS extends Thread {
 
     private ServerSocket socket;
 
-
     private volatile boolean online;
-    private volatile boolean finished;
 
     private int numNodes; 
 
     private volatile TreeMap<byte[], KeyRange> metadata;
     private volatile HashMap<byte[], ECSClientConnection> connections;
 
-    public ECS(String address, int port) {
+    public ECS(String address, int port) throws IOException {
 
 	this.numNodes = 0;
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
@@ -33,16 +31,8 @@ public class ECS extends Thread {
 	this.connections = new HashMap<byte[], ECSClientConnection>();
 
 	logger.info("ECS starting...");
-
-	try {
-            this.socket = new ServerSocket(port, 0, InetAddress.getByName(address));
-            this.online = true;
-            logger.info("Server listening on port: " + this.socket.getLocalPort());
-        } catch (IOException e) {
-            logger.error("Cannot open client socket: " + e.getMessage());
-            this.finished = true;
-            return;
-	}
+	this.socket = new ServerSocket(port, 0, InetAddress.getByName(address));
+	logger.info("Server listening on port: " + this.socket.getLocalPort());
 
     }
 
@@ -122,6 +112,14 @@ public class ECS extends Thread {
 
     }
 
+    public String getHostname() {
+	return this.socket.getInetAddress().getHostName();
+    }
+
+    public int getPort() {
+	return this.socket.getLocalPort();
+    }
+
     public int getNumNodes() {
 	return this.numNodes;
     }
@@ -134,12 +132,22 @@ public class ECS extends Thread {
 	return this.connections;
     }
 
+    public void close() {
+
+	this.online = false;
+
+	try {
+	    this.socket.close();
+	} catch (Exception e) {
+	    logger.error("Failed to gracefully close socket: " + e.getMessage());
+	}
+
+    }
+
     @Override
     public void run() {
 	
-	if (this.finished) {
-	    return;
-	}
+	this.online = true;
 
         while (this.online) {
             try {
@@ -154,7 +162,6 @@ public class ECS extends Thread {
             }
         }
 
-        this.finished = true;
         logger.info("ECS stopped...");
 
     }

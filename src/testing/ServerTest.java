@@ -3,6 +3,7 @@ package testing;
 import java.io.*;
 import java.net.*;
 
+import app_kvECS.ECS;
 import app_kvServer.KVServer;
 import client.KVStore;
 import client.ProtocolMessage;
@@ -19,8 +20,17 @@ public class ServerTest extends TestCase {
     private KVStore kvClient1;
     private KVStore kvClient2;
     private KVServer kvServer;
+    private ECS ecs;
 
     public void setUp() {
+
+	try {
+	    ecs = new ECS("localhost", 0); 
+	    ecs.start();
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
 	try {
 	    (new File("src/testing/data")).mkdirs();
@@ -31,14 +41,26 @@ public class ServerTest extends TestCase {
 	}
 
 	try {
-	    kvServer = new KVServer("localhost", 0, "src/testing/data", 3);
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
+
+	try {
+	    kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
 	    kvServer.start();
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
 	}
 
-	while (!kvServer.isOnline() && !kvServer.isFinished());
+	try {
+	    Thread.sleep(500);
+	} catch (Exception e) {
+	    e.printStackTrace();
+	    return;
+	}
 
 	kvClient1 = new KVStore("localhost", kvServer.getPort());
 	kvClient2 = new KVStore("localhost", kvServer.getPort());
@@ -58,6 +80,7 @@ public class ServerTest extends TestCase {
 	kvClient1.disconnect();
 	kvClient2.disconnect();
 	kvServer.close();
+	ecs.close();
 	
 	File[] testing_data = (new File("src/testing/data")).listFiles();
 
