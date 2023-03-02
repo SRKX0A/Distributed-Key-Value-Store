@@ -27,6 +27,7 @@ public class KVServer extends Thread implements IKVServer {
 
     private ServerSocket clientSocket;
 
+    private ECSConnection ecsConnection;
     private String ecsAddress;
     private int ecsPort;
 
@@ -34,7 +35,6 @@ public class KVServer extends Thread implements IKVServer {
     private int cacheSize;
 
     private volatile boolean online;
-    private volatile boolean finished;
 
     private File wal;
     private TreeMap<String, String> memtable;
@@ -77,16 +77,9 @@ public class KVServer extends Thread implements IKVServer {
         }
         scanner.close();
 
-        logger.info("Starting server...");	
-        try {
-            this.clientSocket = new ServerSocket(port, 0, InetAddress.getByName(address));
-            this.online = true;
-            logger.info("Server listening on port: " + this.clientSocket.getLocalPort());
-        } catch (IOException e) {
-            logger.error("Cannot open client socket: " + e.getMessage());
-            this.finished = true;
-            return;
-        }
+	logger.info("Starting server...");	
+	this.clientSocket = new ServerSocket(port, 0, InetAddress.getByName(address));
+	logger.info("Server listening on port: " + this.clientSocket.getLocalPort());
 
     }
 
@@ -445,20 +438,45 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public void close() {
-        try {
-            this.clientSocket.close();
-        } catch (Exception e) {
-            logger.error("Could not gracefully close: " + e.getMessage());
-        }
+
         this.online = false;
+
+        try {
+
+	    if (this.clientSocket != null) {
+		this.clientSocket.close();
+		this.clientSocket = null;
+	    }
+
+        } catch (Exception e) {
+            logger.error("Could not gracefully close client socket: " + e.getMessage());
+        }
+
+	try {
+
+	    if (this.ecsConnection != null) {
+		this.ecsConnection.getSocket().close();
+		this.ecsConnection = null;
+	    }
+
+	} catch (Exception e) {
+	    logger.error("Could not gracefully close ECS socket: " + e.getMessage());
+	}
+
+    }
+
+    public void sendShutdownMessage() {
+	if (this.ecsConnection != null) {
+	    this.ecsConnection.shutdown();
+	}
     }
 
     public boolean isOnline() {
         return this.online;
     }
 
-    public boolean isFinished() {
-        return this.finished;
+    public void setOnline(boolean online) {
+	this.online = online;
     }
 
     public String getECSAddress() {
@@ -498,11 +516,15 @@ public class KVServer extends Thread implements IKVServer {
     @Override
     public void run() {
 
-        if (this.finished) {
-            return;
-        }
-
-        new ECSConnection(this).start();
+	try {
+	    this.ecsConnection = new ECSConnection(this);
+	    this.ecsConnection.start();
+	    this.online = true;
+	} catch (Exception e) {
+	    logger.error("Could not connect to ECS server: " + e.getMessage());
+	    logger.info("Server stopped...");
+	    return;
+	}
 
         while (this.online) {
             try {
@@ -516,7 +538,6 @@ public class KVServer extends Thread implements IKVServer {
             }
         }
 
-        this.finished = true;
         logger.info("Server stopped...");
     }
 }

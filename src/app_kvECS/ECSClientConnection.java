@@ -64,6 +64,7 @@ public class ECSClientConnection extends Thread {
 			this.handleInitialization(request);
 		    } else if (request.getStatus() == StatusType.TERM_REQ) {
 			this.handleTermination(request);
+			return;
 		    } else {
 			throw new IllegalArgumentException("Error: Server messages must be one of INIT_REQ, TERM_REQ, or REQ_FIN");
 		    }
@@ -139,12 +140,28 @@ public class ECSClientConnection extends Thread {
 	TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
 
 	if (this.ecs.getNumNodes() == 0) {
+	    try {
+		this.sendMessage(StatusType.METADATA_LOCK, null, 0, null, null);
+	    } catch (Exception e) {
+		logger.error("Failed to send write lock message to single terminating node: " + e.getMessage());
+	    }
 	    this.ecs.getConnections().remove(serverRingPosition);
 	    return;
 	}
 
+	byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
+
+	if (successorRingPosition == null) {
+	    successorRingPosition = updatedMetadata.firstKey();
+	}
+
+	KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
+
+	String successorAddress = successorNodeRange.getAddress();
+	int successorPort = successorNodeRange.getPort();
+
 	try {
-	    this.sendMessage(StatusType.METADATA_LOCK, address, port, updatedMetadata, serverRingPosition);
+	    this.sendMessage(StatusType.METADATA_LOCK, successorAddress, successorPort, updatedMetadata, serverRingPosition);
 	} catch (Exception e) {
 	    logger.error("Failed to send write lock message to terminating node: " + e.getMessage());
 	    this.ecs.getConnections().remove(serverRingPosition);

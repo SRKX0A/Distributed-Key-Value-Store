@@ -101,16 +101,35 @@ public class App_KVServer {
 	    File wal = new File(directory, "wal.txt");
 	    wal.createNewFile();
 
-	    new KVServer(address, port, bootstrapAddress, bootstrapPort, directory, cacheSize).start();
-        } catch (IOException e) {
-            e.printStackTrace();
+	    KVServer kvServer = new KVServer(address, port, bootstrapAddress, bootstrapPort, directory, cacheSize);
+	    KVServerShutdownHook kvServerShutdownHook = new KVServerShutdownHook(kvServer);
+	    Runtime.getRuntime().addShutdownHook(kvServerShutdownHook);
+	    kvServer.start();
+        } catch (IOException ioe) {
+	    System.err.println("Could not set up server: " + ioe.getMessage());
+            ioe.printStackTrace();
             System.exit(1);
         } catch (NumberFormatException nfe) {
-            System.out.println("Error! Invalid argument <port>! Not a number!");
-            System.out.println("Usage: Server <port>!");
+            System.err.println("Error! Invalid argument <port>! Not a number!");
             System.exit(1);
         }
 
+    }
+
+}
+
+class KVServerShutdownHook extends Thread {
+
+    private KVServer kvServer;
+
+    public KVServerShutdownHook(KVServer kvServer) {
+	this.kvServer = kvServer;
+    }
+
+    @Override
+    public void run() {
+	this.kvServer.sendShutdownMessage();
+	this.kvServer.close();
     }
 
 }

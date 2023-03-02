@@ -19,30 +19,18 @@ public class ECSConnection extends Thread {
     private ObjectInputStream input;
     private ObjectOutputStream output;
 
-    private volatile boolean finished;
+    private volatile boolean startedShutdown;
+    private volatile boolean finishedShutdown;
 
-    public ECSConnection(KVServer kvServer) {
-
+    public ECSConnection(KVServer kvServer) throws Exception {
 	this.kvServer = kvServer;
-	
-	try {
-	    this.socket = new Socket(this.kvServer.getECSAddress(), this.kvServer.getECSPort());
-	    this.output = new ObjectOutputStream(this.socket.getOutputStream());
-	    this.input = new ObjectInputStream(this.socket.getInputStream());
-	} catch (Exception e) {
-	    logger.error("Could not connect to ECS server: " + e.getMessage());
-	    this.finished = true;
-	    this.kvServer.close();
-	}
-
+	this.socket = new Socket(this.kvServer.getECSAddress(), this.kvServer.getECSPort());
+	this.output = new ObjectOutputStream(this.socket.getOutputStream());
+	this.input = new ObjectInputStream(this.socket.getInputStream());
     }
 
     @Override
     public void run() {
-
-	if (this.finished) {
-	    return;
-	}
 
 	try {
 	    this.sendMessage(ECSMessage.StatusType.INIT_REQ, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
@@ -55,13 +43,17 @@ public class ECSConnection extends Thread {
 	while (true) {
 
 	    try {
-		
+
 		ECSMessage msg = this.receiveMessage();
 
 		if (msg.getStatus() == ECSMessage.StatusType.METADATA_UPDATE) {
 		    this.handleMetadataUpdate(msg);
 		} else if (msg.getStatus() == ECSMessage.StatusType.METADATA_LOCK) {
 		    this.handleMetadataLock(msg);
+		    if (this.startedShutdown) {
+			this.finishedShutdown = true;
+			return;
+		    }
 		}
 
 	    } catch (Exception e) {
@@ -100,21 +92,46 @@ public class ECSConnection extends Thread {
 	String serverAddress = message.getAddress();
 	int serverPort = message.getPort();
 
+	if (serverAddress == null && serverPort == 0) {
+	    logger.debug("Got single termination message from ECS");
+	    return;
+	}
+
 	this.kvServer.setServerState(KVServer.ServerState.SERVER_REBALANCING);
 
 	logger.debug("Got write lock message from ECS");
 
 	//TODO: call function that does the rebalancing (aka server to server communication) here
+	//connects to the server given by <serverAddress:serverPort> and does the transfer,
+	//then returns once it has finished
 	
 	try {
 	    this.sendMessage(ECSMessage.StatusType.REQ_FIN, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
 	} catch (Exception e) {
 	    logger.error("Failed to send REQ_FIN messsage to ECS: " + e.getMessage());
-	    this.kvServer.close();
 	}
 
 	return;
 
+    }
+
+    public void shutdown() {
+
+	try {
+	    this.sendMessage(ECSMessage.StatusType.TERM_REQ, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
+	} catch (Exception e) {
+	    logger.error("Failed to send TERM_REQ message to ECS: " + e.getMessage());
+	    return;
+	}
+
+	this.startedShutdown = true;
+
+	while (!this.finishedShutdown);
+
+    }
+
+    public Socket getSocket() {
+	return this.socket;
     }
 
     public void sendMessage(ECSMessage.StatusType status, String address, int port, TreeMap<byte[], KeyRange> metadata, byte[] ringPosition) throws Exception {
