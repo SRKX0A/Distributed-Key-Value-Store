@@ -42,7 +42,7 @@ public class Connection extends Thread {
 
 		ProtocolMessage request = this.receiveMessage();
 
-		if (this.kvServer.getServerState() != KVServer.ServerState.SERVER_AVAILABLE) {
+		if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
 		    this.sendMessage(StatusType.SERVER_STOPPED, null, null);
 		    continue;
 		}
