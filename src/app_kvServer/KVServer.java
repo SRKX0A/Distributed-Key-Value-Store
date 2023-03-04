@@ -490,7 +490,6 @@ public class KVServer extends Thread implements IKVServer {
     public String getKeyRangeSuccessString() {
 
 	StringBuilder sb = new StringBuilder();
-	//sb.append("keyrange_success ");
 
 	for (var entry: this.metadata.entrySet()) {
 	    KeyRange nodeRange = entry.getValue();
@@ -503,12 +502,10 @@ public class KVServer extends Thread implements IKVServer {
 	    }
 	    sb.append(",");
 	    sb.append(nodeRange.getAddress());
-	    sb.append(",");
+	    sb.append(":");
 	    sb.append(Integer.toString(nodeRange.getPort()));
 	    sb.append(";");
 	}
-
-	sb.append("\r\n");
 	
 	return sb.toString();
     }
