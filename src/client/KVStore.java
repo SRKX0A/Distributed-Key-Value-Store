@@ -72,7 +72,8 @@ public class KVStore implements KVCommInterface {
 		logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", putReply.getStatus(), putReply.getKey(), putReply.getValue())); 
 
 		if (putReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-			this.metadata = this.parseKeyRangeMessage(putReply);
+			ProtocolMessage keyRangeReply = this.keyrange(this.socket);
+			this.metadata = this.parseKeyRangeMessage(keyRangeReply);
 			this.socket = this.identifySocketByKey(key);
 			return this.put(key, value);
 		}
@@ -100,7 +101,8 @@ public class KVStore implements KVCommInterface {
 		logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(), getReply.getValue())); 
 
 		if (getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-			this.metadata = this.parseKeyRangeMessage(getReply);
+			ProtocolMessage keyRangeReply = this.keyrange(this.socket);
+			this.metadata = this.parseKeyRangeMessage(keyRangeReply);
 			this.socket = this.identifySocketByKey(key);
 			return this.get(key);
 		}
@@ -198,8 +200,8 @@ public class KVStore implements KVCommInterface {
 
 			List<String> elems = Arrays.asList(server.split(","));
 
-			byte[] rangeFrom = this.parseHexString(elems.get(0));
-			byte[] rangeTo = this.parseHexString(elems.get(1));
+			byte[] rangeFrom = this.parseHexString(elems.get(1));
+			byte[] rangeTo = this.parseHexString(elems.get(0));
 
 			List<String> AddressAndPort = Arrays.asList(elems.get(2).split(":"));
 

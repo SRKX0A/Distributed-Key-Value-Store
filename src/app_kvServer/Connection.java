@@ -84,7 +84,7 @@ public class Connection extends Thread {
 	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
 
 	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
-		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
+		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, null, null);
 		return;
 	    }
 
@@ -102,7 +102,7 @@ public class Connection extends Thread {
 	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
 
 	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
-		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
+		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, null, null);
 		return;
 	    }
 
