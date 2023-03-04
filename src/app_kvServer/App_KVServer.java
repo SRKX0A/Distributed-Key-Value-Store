@@ -14,6 +14,7 @@ public class App_KVServer {
 	Option bootstrapOption = Option.builder("b").desc("bootstrap server location as <address>:<port>").hasArg().required().type(String.class).build();
 	Option portOption = Option.builder("p").desc("port which server listens on").hasArg().required().type(String.class).build();
 	Option cacheSizeOption = Option.builder("c").desc("sets cache size on server").hasArg().type(String.class).build();
+	Option strategyOption = Option.builder("s").desc("sets caching strategy on server").hasArg().type(String.class).build();
 	Option addressOption = Option.builder("a").desc("address which server listens to").hasArg().type(String.class).build();
 	Option directoryOption = Option.builder("d").desc("directory for persistent files").hasArg().type(String.class).build();
 	Option logOption = Option.builder("l").desc("relative path of the logfile").hasArg().type(String.class).build();
@@ -24,6 +25,7 @@ public class App_KVServer {
 	options.addOption(bootstrapOption);
 	options.addOption(portOption);
 	options.addOption(cacheSizeOption);
+	options.addOption(strategyOption);
 	options.addOption(addressOption);
 	options.addOption(directoryOption);
 	options.addOption(logOption);
@@ -43,6 +45,7 @@ public class App_KVServer {
 	int bootstrapPort = 0;
 	int port = 0;
 	int cacheSize = 100;
+	String cacheStrategy = "None";
 	String address = "localhost";
 	String directory = "./";
 	String logPath = "server.log";
@@ -74,6 +77,10 @@ public class App_KVServer {
 		System.err.println("Parsing failed. Reason: " + e.getMessage());
 		System.exit(1);
 	    }
+	}
+
+	if (cmd.hasOption("s")) {
+	    cacheStrategy = cmd.getOptionValue("s");
 	}
 	
 	if (cmd.hasOption("a")) {
