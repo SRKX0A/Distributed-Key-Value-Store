@@ -17,11 +17,11 @@ public class KVStore implements KVCommInterface {
 	private static final int BUFFER_SIZE = 1024;
 	private static final int DROP_SIZE = 128 * BUFFER_SIZE;
 
+	private Socket socket;
 	private String currentAddress;
 	private int currentPort;
 
 	private TreeMap<byte[], KeyRange> metadata;
-	private HashMap<KeyRange, Socket> connections;
 
 	/**
 	 * Initialize KVStore with address and port of KVServer
@@ -32,31 +32,23 @@ public class KVStore implements KVCommInterface {
 		this.currentAddress = address;	
 		this.currentPort = port;
 		this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
-		this.connections = new HashMap<KeyRange, Socket>();
 	}
 
 	@Override
 	public void connect() throws Exception {
-		Socket socket = new Socket(this.currentAddress, this.currentPort);
+		this.socket = new Socket(this.currentAddress, this.currentPort);
 
-		ProtocolMessage keyRangeMessage = this.keyrange(socket);
+		ProtocolMessage keyRangeMessage = this.keyrange(this.socket);
 		this.metadata = this.parseKeyRangeMessage(keyRangeMessage);
-
-		KeyRange currentServerKeyRange = this.metadata.get(this.hashIP(this.currentAddress, this.currentPort));
-		this.connections.put(currentServerKeyRange, socket);
-
 	}
 
 	@Override
 	public void disconnect() {
 
-		for (var entry: this.connections.entrySet()) {
-			var socket = entry.getValue();
-			try {
-				socket.close();
-			} catch (Exception e) {
-				logger.error("Failed to gracefully close connection: " + e.getMessage());
-			}
+		try {
+			this.socket.close();
+		} catch (Exception e) {
+			logger.error("Failed to gracefully close connection: " + e.getMessage());
 		}
 
 	}
@@ -64,71 +56,56 @@ public class KVStore implements KVCommInterface {
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
 
-		try {
-			Socket targetSocket = this.identifySocketByKey(key);
+		OutputStream output = this.socket.getOutputStream();
+		InputStream input = this.socket.getInputStream();
 
-			OutputStream output = targetSocket.getOutputStream();
-			InputStream input = targetSocket.getInputStream();
+		String p = new String("put " + key + " " + value + "\r\n"); 
+		byte[] b = p.getBytes("UTF-8");
 
-			String p = new String("put " + key + " " + value + "\r\n"); 
-			byte[] b = p.getBytes("UTF-8");
+		output.write(b);
+		output.flush();	
 
-			output.write(b);
-			output.flush();	
+		logger.info("Sent protocol message: Put request with key = " + key + ", value = " + value); 
 
-			logger.info("Sent protocol message: Put request with key = " + key + ", value = " + value); 
+		ProtocolMessage putReply = this.receiveMessage(input);
 
-			ProtocolMessage putReply = this.receiveMessage(input);
+		logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", putReply.getStatus(), putReply.getKey(), putReply.getValue())); 
 
-			logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", putReply.getStatus(), putReply.getKey(), putReply.getValue())); 
-
-			if (putReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-				this.metadata = this.parseKeyRangeMessage(putReply);
-				return this.put(key, value);
-			}
-
-			return putReply;
-
-		} catch (Exception e) {
-			ProtocolMessage keyRangeMessage = this.keyrange();
-			this.metadata = this.parseKeyRangeMessage(keyRangeMessage);
+		if (putReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
+			this.metadata = this.parseKeyRangeMessage(putReply);
+			this.socket = this.identifySocketByKey(key);
 			return this.put(key, value);
 		}
+
+		return putReply;
+
 	}
 
 	@Override
 	public KVMessage get(String key) throws Exception {
 
-		try {
+		OutputStream output = this.socket.getOutputStream();
+		InputStream input = this.socket.getInputStream();
 
-			Socket targetSocket = this.identifySocketByKey(key);
+		String p = new String("get " + key + "\r\n"); 
+		byte[] b = p.getBytes("UTF-8");
 
-			OutputStream output = targetSocket.getOutputStream();
-			InputStream input = targetSocket.getInputStream();
+		output.write(b);
+		output.flush();	
 
-			String p = new String("get " + key + "\r\n"); 
-			byte[] b = p.getBytes("UTF-8");
+		logger.info("Sent protocol message: GET request with key = " + key + ", value = null"); 
 
-			output.write(b);
-			output.flush();	
+		ProtocolMessage getReply = this.receiveMessage(input);
 
-			logger.info("Sent protocol message: GET request with key = " + key + ", value = null"); 
+		logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(), getReply.getValue())); 
 
-			ProtocolMessage getReply = this.receiveMessage(input);
-
-			logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(), getReply.getValue())); 
-
-			if (getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-				this.metadata = this.parseKeyRangeMessage(getReply);
-				return this.get(key);
-			}
-
-			return getReply;
-		} catch (Exception e) {
-			ProtocolMessage keyRangeMessage = this.keyrange();
-			this.metadata = this.parseKeyRangeMessage(keyRangeMessage);
+		if (getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
+			this.metadata = this.parseKeyRangeMessage(getReply);
+			this.socket = this.identifySocketByKey(key);
 			return this.get(key);
 		}
+
+		return getReply;
 	}
 
 	public ProtocolMessage keyrange(Socket socket) throws Exception {
@@ -144,40 +121,6 @@ public class KVStore implements KVCommInterface {
 
 		return keyrangeReply;
 
-	}
-
-	public ProtocolMessage keyrange() throws Exception {
-
-		ProtocolMessage reply = null;
-
-		var entryIterator = this.connections.entrySet().iterator();
-		while (entryIterator.hasNext()) {
-			
-			var entry = entryIterator.next();
-			var keyRange = entry.getKey();
-			var socket = entry.getValue();
-
-			try {
-				reply = this.keyrange(socket);
-			} catch (Exception e) {
-				logger.debug(String.format("Failed to connect to node <%s:%d>", socket.getInetAddress().getHostName(), socket.getPort()));
-				this.connections.remove(keyRange);
-				return this.keyrange();
-			}
-
-		}
-
-		if (reply == null) {
-			throw new Exception("No available connections");
-		}
-
-		return reply;
-
-	}
-
-	public void connectToSocketByKeyRange(KeyRange keyRange) throws Exception {
-		Socket socket = new Socket(keyRange.getAddress(), keyRange.getPort());
-		this.connections.put(keyRange, socket);
 	}
 
 	public ProtocolMessage receiveMessage(InputStream input) throws Exception {
@@ -236,19 +179,11 @@ public class KVStore implements KVCommInterface {
 
 		var targetServerKeyRange = targetServerKeyRangeEntry.getValue();
 
-		StringBuffer sb = new StringBuffer();
+		Socket socket = new Socket(targetServerKeyRange.getAddress(), targetServerKeyRange.getPort());
+		this.currentAddress = targetServerKeyRange.getAddress();
+		this.currentPort = targetServerKeyRange.getPort();
 
-		for (int i = 0; i < targetServerKeyRange.getRangeFrom().length; i++) {
-			sb.append(String.format("%02x", targetServerKeyRange.getRangeFrom()[i]));
-		}
-
-		logger.debug(String.format("key %s hashes to %s at <%s:%d>", key, sb.toString(), targetServerKeyRange.getAddress(), targetServerKeyRange.getPort()));
-
-		if (!this.connections.containsKey(targetServerKeyRange)) {
-			this.connectToSocketByKeyRange(targetServerKeyRange);
-		}
-
-		return this.connections.get(targetServerKeyRange);
+		return socket;
 	}
 
 	private TreeMap<byte[], KeyRange> parseKeyRangeMessage(ProtocolMessage message) throws Exception {
@@ -307,19 +242,6 @@ public class KVStore implements KVCommInterface {
 		}
 
 		return byteArray;
-
-	}
-
-	private byte[] hashIP(String address, int port) throws Exception {
-
-		try {
-			String valueToHash = address + ":" + Integer.toString(port);	
-			MessageDigest md = MessageDigest.getInstance("MD5");
-			md.update(valueToHash.getBytes());
-			return md.digest();
-		} catch (Exception e) {
-			throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
-		}
 
 	}
 

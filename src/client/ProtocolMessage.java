@@ -196,7 +196,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
     public byte[] getBytes() throws Exception {
 
-	if (this.status == StatusType.KEYRANGE_SUCCESS) {
+	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
 	    String msgString = this.status.toString() + " " + this.key + "\r\n";     
 	    return msgString.getBytes("UTF-8");
 	} else {
