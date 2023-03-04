@@ -649,11 +649,11 @@ public class KVServer extends Thread implements IKVServer {
 
 	for (var entry: this.metadata.entrySet()) {
 	    KeyRange nodeRange = entry.getValue();
-	    for (var b: nodeRange.getRangeFrom()) {
+	    for (var b: nodeRange.getRangeTo()) {
 		sb.append(String.format("%02x", b));
 	    }
 	    sb.append(",");
-	    for (var b: nodeRange.getRangeTo()) {
+	    for (var b: nodeRange.getRangeFrom()) {
 		sb.append(String.format("%02x", b));
 	    }
 	    sb.append(",");
