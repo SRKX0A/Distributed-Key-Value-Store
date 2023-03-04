@@ -223,18 +223,20 @@ public class KVServer extends Thread implements IKVServer {
                 if (key.equals(test_key)) {
                     logger.info("Got key = " + key + " from storage with value = " + test_value);
 
-                    synchronized (this.memtableLock) {
-                        this.memtable.put(test_key, test_value);
-                        if (this.memtable.size() >= this.cacheSize) {
-			    this.dumpCounter++;
-                            this.dumpCacheToDisk();
-			    if (this.dumpCounter == 3) {
-				this.compactLogs();
-				this.clearOldLogs();
-				this.dumpCounter = 0;
+		    if (this.state != ServerState.SERVER_REBALANCING) {
+			synchronized (this.memtableLock) {
+			    this.memtable.put(test_key, test_value);
+			    if (this.memtable.size() >= this.cacheSize) {
+				this.dumpCounter++;
+				this.dumpCacheToDisk();
+				if (this.dumpCounter == 3) {
+				    this.compactLogs();
+				    this.clearOldLogs();
+				    this.dumpCounter = 0;
+				}
 			    }
-                        }
-                    }
+			}
+		    }
 
                     scanner.close();
                     return test_value;
