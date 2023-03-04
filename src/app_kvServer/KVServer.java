@@ -33,6 +33,7 @@ public class KVServer extends Thread implements IKVServer {
 
     private String directory;
     private int cacheSize;
+    private int dumpCounter;
 
     private volatile boolean online;
 
@@ -61,6 +62,7 @@ public class KVServer extends Thread implements IKVServer {
 
         this.directory = directory;
         this.cacheSize = cacheSize;
+	this.dumpCounter = 0;
 
         this.wal = new File(this.directory, "wal.txt");
         this.memtable = new TreeMap<String, String>();
@@ -224,7 +226,13 @@ public class KVServer extends Thread implements IKVServer {
                     synchronized (this.memtableLock) {
                         this.memtable.put(test_key, test_value);
                         if (this.memtable.size() >= this.cacheSize) {
+			    this.dumpCounter++;
                             this.dumpCacheToDisk();
+			    if (this.dumpCounter == 3) {
+				this.compactLogs();
+				this.clearOldLogs();
+				this.dumpCounter = 0;
+			    }
                         }
                     }
 
@@ -259,7 +267,13 @@ public class KVServer extends Thread implements IKVServer {
             }
 
         if (this.memtable.size() >= this.cacheSize) {
-                this.dumpCacheToDisk();
+		this.dumpCounter++;
+		this.dumpCacheToDisk();
+		if (this.dumpCounter == 3) {
+		    this.compactLogs();
+		    this.clearOldLogs();
+		    this.dumpCounter = 0;
+		}
             }
         }
 
@@ -290,7 +304,7 @@ public class KVServer extends Thread implements IKVServer {
 
     public void compactLogs() throws Exception {
 
-        logger.info("Compacting logs.");
+        logger.info("Compacting logs");
 
         HashSet<String> keySet = new HashSet<String>();
 
@@ -308,13 +322,13 @@ public class KVServer extends Thread implements IKVServer {
             }
         });
 
-        String timestamp = Instant.now().toString();
-        File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
-        dumpedFile.createNewFile();
-        BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-        int keyCount = 0;
-
         for (File file: store_files) {
+
+	    String timestamp = Instant.now().toString();
+	    File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
+	    dumpedFile.createNewFile();
+	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+
             Scanner scanner = new Scanner(file);
             scanner.useDelimiter("\r\n");
             while (scanner.hasNext()) {
@@ -324,27 +338,28 @@ public class KVServer extends Thread implements IKVServer {
                 if (!keySet.contains(test_key)) {
                     keySet.add(test_key); 
                     dumpedWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
-                    keyCount++;
-
-                    if (keyCount >= this.cacheSize) {
-                        dumpedWriter.close();	
-                        timestamp = Instant.now().toString();
-                        dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
-                        dumpedFile.createNewFile();
-                        dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-                        keyCount = 0;
-                    }
-
                 }
             }
+	    dumpedWriter.close();
             scanner.close();
         }
 
+        File[] compacted_files = store_dir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("CompactedKVServerStoreFile_");
+            }
+        });
+
+        for (File file: compacted_files) {
+	    if (file.length() == 0) {
+		file.delete();
+	    }
+	}
     }
 
     public void clearOldLogs() throws Exception {
 
-        logger.info("Clearing old logs.");
+        logger.info("Clearing old logs");
 
         File store_dir = new File(this.directory);
 
@@ -366,7 +381,7 @@ public class KVServer extends Thread implements IKVServer {
 
         for (File file: compacted_files) {
             String filename = file.getName();
-            File newFile = new File(filename.substring(0, 9));
+            File newFile = new File(this.directory, filename.substring(9));
             file.renameTo(newFile);
         }
 
