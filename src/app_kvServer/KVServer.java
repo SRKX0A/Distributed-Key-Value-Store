@@ -310,49 +310,61 @@ public class KVServer extends Thread implements IKVServer {
 
         HashSet<String> keySet = new HashSet<String>();
 
-        File store_dir = new File(this.directory);
+        File storeDir = new File(this.directory);
 
-        File[] store_files = store_dir.listFiles(new FilenameFilter() {
+        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("KVServerStoreFile_");
             }
         });
 
-        Arrays.sort(store_files, new Comparator<File>() {
+        Arrays.sort(storeFiles, new Comparator<File>() {
             public int compare(File f1, File f2) {
                 return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
             }
         });
 
-        for (File file: store_files) {
+	File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	dumpedFile.createNewFile();
+	BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+	int keyCount = 0;
 
-	    String timestamp = Instant.now().toString();
-	    File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + timestamp + ".txt"); 
-	    dumpedFile.createNewFile();
-	    BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+        for (File file: storeFiles) {
 
             Scanner scanner = new Scanner(file);
             scanner.useDelimiter("\r\n");
+
             while (scanner.hasNext()) {
                 String test_key = scanner.next();
                 String test_value = scanner.next();
 
                 if (!keySet.contains(test_key)) {
                     keySet.add(test_key); 
-                    dumpedWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
+                    dumpedWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));
+		    keyCount++;
+
+		    if (keyCount >= this.cacheSize) {
+			dumpedWriter.close();
+			dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+			dumpedFile.createNewFile();
+			dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
+			keyCount = 0;
+		    }
+
                 }
             }
-	    dumpedWriter.close();
             scanner.close();
         }
 
-        File[] compacted_files = store_dir.listFiles(new FilenameFilter() {
+	dumpedWriter.close();
+
+        File[] compactedFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("CompactedKVServerStoreFile_");
             }
         });
 
-        for (File file: compacted_files) {
+        for (File file: compactedFiles) {
 	    if (file.length() == 0) {
 		file.delete();
 	    }
@@ -363,19 +375,19 @@ public class KVServer extends Thread implements IKVServer {
 
         logger.info("Clearing old logs");
 
-        File store_dir = new File(this.directory);
+        File storeDir = new File(this.directory);
 
-        File[] store_files = store_dir.listFiles(new FilenameFilter() {
+        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("KVServerStoreFile_");
             }
         });
 
-        for (File file: store_files) {
+        for (File file: storeFiles) {
             file.delete();
         }
 
-        File[] compacted_files = store_dir.listFiles(new FilenameFilter() {
+        File[] compacted_files = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("CompactedKVServerStoreFile_");
             }
@@ -388,26 +400,31 @@ public class KVServer extends Thread implements IKVServer {
         }
 
     }
-/*
-    public void filterLogsByKeyRange() throws Exception {
+
+    public void partitionLogsByKeyRange() throws Exception {
         
-        KeyRange serverRange = this.metadata.get(this.metadataIndex);
+	byte[] serverHash = this.hashIP(this.getHostname(), this.getPort());
+	KeyRange serverRange = this.metadata.get(serverHash);
 
-        File store_dir = new File(this.directory);
+        File storeDir = new File(this.directory);
 
-        File[] store_files = store_dir.listFiles(new FilenameFilter() {
+        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("KVServerStoreFile_");
             }
         });
 
-        String timestamp = Instant.now().toString();
-        File filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + timestamp + ".txt"); 
+        File filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
         filteredFile.createNewFile();
         BufferedWriter filteredWriter = new BufferedWriter(new FileWriter(filteredFile, true));
-        int keyCount = 0;
+        int filteredKeyCount = 0;
 
-        for (File file: store_files) {
+        File stayFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+        stayFile.createNewFile();
+        BufferedWriter stayWriter = new BufferedWriter(new FileWriter(stayFile, true));
+        int stayKeyCount = 0;
+
+        for (File file: storeFiles) {
             Scanner scanner = new Scanner(file);
             scanner.useDelimiter("\r\n");
             while (scanner.hasNext()) {
@@ -419,25 +436,53 @@ public class KVServer extends Thread implements IKVServer {
                 byte[] keyDigest = md.digest();
 
                 if (!serverRange.withinKeyRange(keyDigest)) {
-                    filteredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
-                    keyCount++;
 
-                    if (keyCount >= this.cacheSize) {
+                    filteredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
+                    filteredKeyCount++;
+
+                    if (filteredKeyCount >= this.cacheSize) {
                         filteredWriter.close();	
-                        timestamp = Instant.now().toString();
-                        filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + timestamp + ".txt"); 
+                        filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
                         filteredFile.createNewFile();
                         filteredWriter = new BufferedWriter(new FileWriter(filteredFile, true));
-                        keyCount = 0;
+                        filteredKeyCount = 0;
                     }
 
-                }
+                } else {
+
+                    stayWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
+                    stayKeyCount++;
+
+                    if (stayKeyCount >= this.cacheSize) {
+                        stayWriter.close();	
+                        stayFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+                        stayFile.createNewFile();
+                        stayWriter = new BufferedWriter(new FileWriter(stayFile, true));
+                        stayKeyCount = 0;
+                    }
+		}
             }
+	    file.delete();
             scanner.close();
         }
+	
+	filteredWriter.close();
+	stayWriter.close();
+
+        File[] partitionedFiles = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("KVServerStoreFile_") || name.startsWith("FilteredKVServerStoreFile_");
+            }
+        });
+
+        for (File file: partitionedFiles) {
+	    if (file.length() == 0) {
+		file.delete();
+	    }
+	}
 
     }
-*/
+
     @Override
     public void clearCache() {
         this.memtable.clear();
@@ -553,5 +598,16 @@ public class KVServer extends Thread implements IKVServer {
         }
 
         logger.info("Server stopped...");
+    }
+
+    private byte[] hashIP(String address, int port) {
+	try {
+	    String valueToHash = address + ":" + Integer.toString(port);	
+	    MessageDigest md = MessageDigest.getInstance("MD5");
+	    md.update(valueToHash.getBytes());
+	    return md.digest();
+	} catch (Exception e) {
+	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
+	}
     }
 }
