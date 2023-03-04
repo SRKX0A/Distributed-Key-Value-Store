@@ -19,6 +19,7 @@ public interface KVMessage {
 		SERVER_STOPPED,
 		SERVER_WRITE_LOCK,
 		SERVER_NOT_RESPONSIBLE,
+		SEND_KV,
 	}
 
 	/**

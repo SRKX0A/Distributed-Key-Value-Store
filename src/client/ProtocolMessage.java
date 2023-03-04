@@ -43,11 +43,13 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = KVMessage.StatusType.PUT;
 	} else if (status.toLowerCase().equals("get")) {
 	    protocolStatus = KVMessage.StatusType.GET;
+	} else if (status.toLowerCase().equals("send_kv")) {
+	    protocolStatus = KVMessage.StatusType.SEND_KV;
 	} else {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	if (protocolStatus == KVMessage.StatusType.PUT) {
+	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
 
@@ -72,7 +74,8 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    } else {
 		protocolValue = value.substring(0, value.length() - 2);
 	    }
-	} else {
+
+	} else if (protocolStatus == KVMessage.StatusType.GET) {
 	   
 	    String key = msgString.substring(indexOfFirstSpace + 1);
 
@@ -85,7 +88,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
-	}
+	} 
 
 	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
 
@@ -196,14 +199,15 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
     public byte[] getBytes() throws Exception {
 
+	String msgString = null;
+
 	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
-	    String msgString = this.status.toString() + " " + this.key + "\r\n";     
-	    return msgString.getBytes("UTF-8");
+	    msgString = this.status.toString() + " " + this.key + "\r\n";     
 	} else {
-	    String msgString = this.status.toString() + " " + this.key + " " + this.value + "\r\n";
-	    return msgString.getBytes("UTF-8");
+	    msgString = this.status.toString() + " " + this.key + " " + this.value + "\r\n";
 	}
 
+	return msgString.getBytes("UTF-8");
     }
 
     public String getKey() {

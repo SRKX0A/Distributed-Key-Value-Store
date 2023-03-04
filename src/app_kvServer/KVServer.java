@@ -1,6 +1,7 @@
 package app_kvServer;
 
 import java.io.*;
+import java.nio.file.*;
 import java.net.*;
 import java.util.*;
 import java.security.*;
@@ -8,6 +9,7 @@ import java.time.*;
 
 import org.apache.log4j.Logger;
 
+import client.ProtocolMessage;
 import shared.KeyRange;
 import shared.ByteArrayComparator;
 import shared.messages.KVMessage.StatusType;
@@ -371,7 +373,7 @@ public class KVServer extends Thread implements IKVServer {
 	}
     }
 
-    public void clearOldLogs() throws Exception {
+    public void clearOldLogs() {
 
         logger.info("Clearing old logs");
 
@@ -480,6 +482,56 @@ public class KVServer extends Thread implements IKVServer {
 		file.delete();
 	    }
 	}
+
+    }
+
+    public void clearFilteredLogs() {
+
+        logger.info("Clearing filtered logs");
+
+        File storeDir = new File(this.directory);
+
+        File[] filteredFiles = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("FilteredKVServerStoreFile_");
+            }
+        });
+
+        for (File file: filteredFiles) {
+            file.delete();
+        }
+
+    }
+
+    public void sendFilteredLogsToServer(String address, int port) throws Exception {
+	
+	Socket serverSocket = new Socket(address, port);
+	OutputStream output = serverSocket.getOutputStream();
+
+        File storeDir = new File(this.directory);
+
+        File[] filteredFiles = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("FilteredKVServerStoreFile_");
+            }
+        });
+
+	for (File file: filteredFiles) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String key = scanner.next();
+                String value = scanner.next();
+
+		ProtocolMessage message = new ProtocolMessage(StatusType.SEND_KV, key, value);
+
+		output.write(message.getBytes());
+		output.flush();
+	    }
+	    scanner.close();
+	}
+	
+	serverSocket.close();
 
     }
 
