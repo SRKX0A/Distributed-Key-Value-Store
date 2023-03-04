@@ -201,8 +201,10 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String msgString = null;
 
-	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
+	if (this.status == StatusType.KEYRANGE_SUCCESS) {
 	    msgString = this.status.toString() + " " + this.key + "\r\n";     
+	} else if (this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
+	    msgString = this.status.toString() + "\r\n";
 	} else {
 	    msgString = this.status.toString() + " " + this.key + " " + this.value + "\r\n";
 	}
