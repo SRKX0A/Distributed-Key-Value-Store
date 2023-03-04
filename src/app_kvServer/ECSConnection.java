@@ -97,13 +97,17 @@ public class ECSConnection extends Thread {
 	    return;
 	}
 
+	this.kvServer.setMetadata(message.getMetadata());
 	this.kvServer.setServerState(KVServer.ServerState.SERVER_REBALANCING);
 
 	logger.debug("Got write lock message from ECS");
 
-	//TODO: call function that does the rebalancing (aka server to server communication) here
-	//connects to the server given by <serverAddress:serverPort> and does the transfer,
-	//then returns once it has finished
+	this.kvServer.dumpCacheToDisk();
+	this.kvServer.compactLogs();
+	this.kvServer.clearOldLogs();
+	this.kvServer.partitionLogsByKeyRange();
+	this.kvServer.sendFilteredLogsToServer(serverAddress, serverPort);
+	this.kvServer.clearFilteredLogs();
 	
 	try {
 	    this.sendMessage(ECSMessage.StatusType.REQ_FIN, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);

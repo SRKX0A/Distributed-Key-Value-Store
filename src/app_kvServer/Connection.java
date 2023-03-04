@@ -40,10 +40,10 @@ public class Connection extends Thread {
 
 	    try {
 
-		ProtocolMessage request = this.receiveMessage();
+		ProtocolMessage request = receiveMessage(this.input);
 
-		if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
-		    this.sendMessage(StatusType.SERVER_STOPPED, null, null);
+		if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING && request.getStatus() != StatusType.SEND_KV) {
+		    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 		    continue;
 		}
 
@@ -53,6 +53,8 @@ public class Connection extends Thread {
 		    this.handleGetRequest(request); 
 		} else if (request.getStatus() == StatusType.KEYRANGE) {
 		    this.handleKeyrangeRequest(request);
+		} else if (request.getStatus() == StatusType.SEND_KV) {
+		    this.handleSendKVRequest(request);
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}
@@ -75,22 +77,22 @@ public class Connection extends Thread {
 	try {
 
 	    if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_REBALANCING) {
-		this.sendMessage(StatusType.SERVER_WRITE_LOCK, null, null);
+		sendMessage(this.output, StatusType.SERVER_WRITE_LOCK, null, null);
 		return;
 	    }
 
 	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
 
 	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
-		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
+		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
 		return;
 	    }
 
 	    StatusType response_status = this.kvServer.putKV(request.getKey(), request.getValue());
-	    this.sendMessage(response_status, request.getKey(), request.getValue());
+	    sendMessage(this.output, response_status, request.getKey(), request.getValue());
 	} catch (Exception e) {
 	    logger.error("Failure in handling PUT request: " + e.toString());
-	    this.sendMessage(StatusType.PUT_ERROR, request.getKey(), request.getValue());
+	    sendMessage(this.output, StatusType.PUT_ERROR, request.getKey(), request.getValue());
 	}
     }
 
@@ -100,43 +102,49 @@ public class Connection extends Thread {
 	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
 
 	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
-		this.sendMessage(StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
+		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, this.kvServer.getKeyRangeSuccessString(), null);
 		return;
 	    }
 
 	    String value = this.kvServer.getKV(request.getKey());
 
 	    if (value.equals("null")) {
-		this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
+		sendMessage(this.output, StatusType.GET_ERROR, request.getKey(), null);
 	    } else {
-		this.sendMessage(StatusType.GET_SUCCESS, request.getKey(), value);
+		sendMessage(this.output, StatusType.GET_SUCCESS, request.getKey(), value);
 	    }
 
 	} catch (Exception e) {
 	    logger.error("Failure to handle GET request: " + e.toString());
-	    this.sendMessage(StatusType.GET_ERROR, request.getKey(), null);
+	    sendMessage(this.output, StatusType.GET_ERROR, request.getKey(), null);
 	}
+    }
+
+    public void handleSendKVRequest(KVMessage request) throws Exception {
+
+	this.kvServer.receiveFilteredLogsFromServer(this.input, this.output, (ProtocolMessage) request);
+
     }
 
     public void handleKeyrangeRequest(KVMessage request) throws Exception {
 	try {
-	    this.sendMessage(StatusType.KEYRANGE_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
+	    sendMessage(this.output, StatusType.KEYRANGE_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
 	} catch (Exception e) {
 	    logger.error("Failure to handle KEYRANGE request: " + e.toString());
-	    this.sendMessage(StatusType.SERVER_STOPPED, null, null);
+	    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 	}
     }
 
     public void handleInvalidMessageRequestType() throws Exception {
 	logger.error("Client message format failure: Invalid request status.");
-	this.sendMessage(StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
+	sendMessage(this.output, StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
     }
 
     public void handleIllegalArgumentException(IllegalArgumentException iae) {
 	logger.error("Client message format failure: " + iae.toString());
 
 	try {
-	    this.sendMessage(StatusType.FAILED, iae.toString(), iae.toString());
+	    sendMessage(this.output, StatusType.FAILED, iae.toString(), iae.toString());
 	} catch (Exception e) {
 	    logger.error("Failed to send failure message: " + e.toString()); 
 	}
@@ -158,7 +166,7 @@ public class Connection extends Thread {
 	}
     }
 
-    private ProtocolMessage receiveMessage() throws IllegalArgumentException, IOException, Exception {
+    public static ProtocolMessage receiveMessage(InputStream input) throws IllegalArgumentException, IOException, Exception {
 
 	int byteCount = 0;
 	int index = 0;
@@ -167,7 +175,7 @@ public class Connection extends Thread {
 	byte prev_value = 0;
 	byte cur_value = 0;
 
-	while ((cur_value = (byte) this.input.read()) != -1) {
+	while ((cur_value = (byte) input.read()) != -1) {
 
 	    msgBuf[byteCount++] = cur_value;
 	    index++;
@@ -206,11 +214,11 @@ public class Connection extends Thread {
 	return request;
     }
 
-    private void sendMessage(StatusType status, String key, String value) throws Exception {
+    public static void sendMessage(OutputStream output, StatusType status, String key, String value) throws Exception {
 	
 	ProtocolMessage response = new ProtocolMessage(status, key, value);
-	this.output.write(response.getBytes());
-	this.output.flush();
+	output.write(response.getBytes());
+	output.flush();
 
 	logger.info(String.format("Sent protocol message: status = %s, key = %s, value = %s", response.getStatus(), response.getKey(), response.getValue()));
     }

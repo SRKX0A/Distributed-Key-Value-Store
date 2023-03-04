@@ -1,7 +1,6 @@
 package app_kvServer;
 
 import java.io.*;
-import java.nio.file.*;
 import java.net.*;
 import java.util.*;
 import java.security.*;
@@ -289,7 +288,6 @@ public class KVServer extends Thread implements IKVServer {
 
         logger.info("Dumping current cache contents to disk.");
 
-
         String timestamp = Instant.now().toString();
         File dumpedFile = new File(this.directory, "KVServerStoreFile_" + timestamp + ".txt"); 
         dumpedFile.createNewFile();
@@ -437,7 +435,7 @@ public class KVServer extends Thread implements IKVServer {
                 md.update(test_key.getBytes());
                 byte[] keyDigest = md.digest();
 
-                if (!serverRange.withinKeyRange(keyDigest)) {
+                if (serverRange == null || !serverRange.withinKeyRange(keyDigest)) {
 
                     filteredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
                     filteredKeyCount++;
@@ -504,6 +502,8 @@ public class KVServer extends Thread implements IKVServer {
     }
 
     public void sendFilteredLogsToServer(String address, int port) throws Exception {
+
+	logger.info(String.format("Sending filtered logs to <%s,%d>", address, port));
 	
 	Socket serverSocket = new Socket(address, port);
 	OutputStream output = serverSocket.getOutputStream();
@@ -525,13 +525,55 @@ public class KVServer extends Thread implements IKVServer {
 
 		ProtocolMessage message = new ProtocolMessage(StatusType.SEND_KV, key, value);
 
+		logger.info(String.format("Sending key = %s, value = %s", key, value));
+
 		output.write(message.getBytes());
 		output.flush();
+
 	    }
 	    scanner.close();
 	}
 	
 	serverSocket.close();
+
+    }
+
+    public void receiveFilteredLogsFromServer(InputStream input, OutputStream output, ProtocolMessage initialMessage) throws Exception {
+
+	logger.info("Receiving SEND_KV messages from server");
+
+	File receivedFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	receivedFile.createNewFile();
+	BufferedWriter receivedWriter = new BufferedWriter(new FileWriter(receivedFile, true));
+	int keyCount = 0;
+
+	ProtocolMessage message = initialMessage;
+
+	while (true) {
+
+	    String key = message.getKey();
+	    String value = message.getValue();
+	    
+	    receivedWriter.write(String.format("%s\r\n%s\r\n", key, value));
+	    keyCount++;
+
+	    if (keyCount >= this.cacheSize) {
+		receivedWriter.close();
+		receivedFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+		receivedFile.createNewFile();
+		receivedWriter = new BufferedWriter(new FileWriter(receivedFile, true));
+		keyCount = 0;
+	    }
+
+	    try {
+		message = Connection.receiveMessage(input);
+	    } catch (Exception e) {
+		receivedWriter.close();
+		throw e;
+	    }
+
+	}
+
 
     }
 
@@ -662,4 +704,5 @@ public class KVServer extends Thread implements IKVServer {
 	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
 	}
     }
+
 }
