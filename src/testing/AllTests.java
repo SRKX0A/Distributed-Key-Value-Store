@@ -28,6 +28,8 @@ public class AllTests {
 	//clientSuite.addTestSuite(ServerTest.class);
 	//clientSuite.addTestSuite(PerformanceTest.class);
 	clientSuite.addTestSuite(KeyRangeTest.class);
+	clientSuite.addTestSuite(ECSTest.class);
+	clientSuite.addTestSuite(StoreTest.class);
 	return clientSuite;
     }
 	
