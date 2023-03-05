@@ -115,6 +115,8 @@ public class ECSConnection extends Thread {
 	    logger.error("Failed to send REQ_FIN messsage to ECS: " + e.getMessage());
 	}
 
+	Thread.sleep(100);
+
 	return;
 
     }
