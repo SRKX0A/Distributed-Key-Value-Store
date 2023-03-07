@@ -45,11 +45,13 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = KVMessage.StatusType.GET;
 	} else if (status.toLowerCase().equals("send_kv")) {
 	    protocolStatus = KVMessage.StatusType.SEND_KV;
+	} else if (status.toLowerCase().equals("replicate_kv")) {
+	    protocolStatus = KVMessage.StatusType.REPLICATE_KV;
 	} else {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV) {
+	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV || protocolStatus == KVMessage.StatusType.REPLICATE_KV) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
 

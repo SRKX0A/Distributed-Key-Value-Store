@@ -577,6 +577,107 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
+    public void sendReplicatedLogsToServer(String address, int port) throws Exception {
+
+	logger.info(String.format("Sending replicated logs to <%s,%d>", address, port));
+	
+	Socket serverSocket = new Socket(address, port);
+	OutputStream output = serverSocket.getOutputStream();
+
+        File storeDir = new File(this.directory);
+
+        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("KVServerStoreFile_");
+            }
+        });
+
+	for (File file: storeFiles) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String key = scanner.next();
+                String value = scanner.next();
+
+		ProtocolMessage message = new ProtocolMessage(StatusType.REPLICATE_KV, key, value);
+
+		logger.info(String.format("Replicating key = %s, value = %s", key, value));
+
+		output.write(message.getBytes());
+		output.flush();
+
+	    }
+	    scanner.close();
+	}
+	
+	serverSocket.close();
+
+    }
+
+    public void receiveReplicatedLogsFromServer(InputStream input, OutputStream output, ProtocolMessage initialMessage) throws Exception {
+
+	logger.info("Receiving REPLICATE_KV messages from server");
+
+	File replicatedFile = new File(this.directory, "NewReplicatedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	replicatedFile.createNewFile();
+	BufferedWriter replicatedWriter = new BufferedWriter(new FileWriter(replicatedFile, true));
+	int keyCount = 0;
+
+	ProtocolMessage message = initialMessage;
+
+	while (true) {
+
+	    String key = message.getKey();
+	    String value = message.getValue();
+	    
+	    replicatedWriter.write(String.format("%s\r\n%s\r\n", key, value));
+	    keyCount++;
+
+	    if (keyCount >= this.cacheSize) {
+		replicatedWriter.close();
+		replicatedFile = new File(this.directory, "NewReplicatedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+		replicatedFile.createNewFile();
+		replicatedWriter = new BufferedWriter(new FileWriter(replicatedFile, true));
+		keyCount = 0;
+	    }
+
+	    try {
+		message = Connection.receiveMessage(input);
+	    } catch (Exception e) {
+		replicatedWriter.close();
+
+		File storeDir = new File(this.directory);
+
+		File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
+		    public boolean accept(File dir, String name) {
+			return name.startsWith("ReplicatedKVServerStoreFile_");
+		    }
+		});
+
+		for (File file: replicatedFiles) {
+		    file.delete();
+		}
+
+		File[] newReplicatedFiles = storeDir.listFiles(new FilenameFilter() {
+		    public boolean accept(File dir, String name) {
+			return name.startsWith("NewReplicatedKVServerStoreFile_");
+		    }
+		});
+
+		for (File file: newReplicatedFiles) {
+		    String filename = file.getName();
+		    File newFile = new File(this.directory, filename.substring(3));
+		    file.renameTo(newFile);
+		}
+	
+		throw e;
+	    }
+
+	}
+
+
+    }
+
     @Override
     public void clearCache() {
         this.memtable.clear();

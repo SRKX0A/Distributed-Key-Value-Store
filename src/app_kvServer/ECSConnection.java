@@ -3,6 +3,7 @@ package app_kvServer;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.security.*;
 
 import org.apache.log4j.Logger;
 
@@ -85,6 +86,57 @@ public class ECSConnection extends Thread {
 	    this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
 	}
 
+	if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
+	    return;
+	}
+
+	var metadata = message.getMetadata();
+
+	var serverRingPosition = this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort());
+	var serverKeyRange = metadata.get(serverRingPosition);
+
+	var firstReplica = metadata.higherEntry(serverRingPosition);
+
+	if (firstReplica == null) {
+	    firstReplica = metadata.firstEntry();
+	}
+
+	var firstReplicaKeyRange = firstReplica.getValue();
+
+	if (serverKeyRange.equals(firstReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.kvServer.dumpCacheToDisk();
+	    this.kvServer.compactLogs();
+	    this.kvServer.clearOldLogs();
+	    this.kvServer.sendReplicatedLogsToServer(firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.error("Failed to complete replication on first replica: " + e.getMessage());
+	}
+
+	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
+
+	if (secondReplica == null) {
+	    secondReplica = metadata.firstEntry();
+	}
+
+	var secondReplicaKeyRange = secondReplica.getValue();
+
+	if (serverKeyRange.equals(secondReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.kvServer.dumpCacheToDisk();
+	    this.kvServer.compactLogs();
+	    this.kvServer.clearOldLogs();
+	    this.kvServer.sendReplicatedLogsToServer(secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.error("Failed to complete replication on second replica: " + e.getMessage());
+	}
+
     }
 
     public void handleMetadataLock(ECSMessage message) throws Exception {
@@ -161,6 +213,17 @@ public class ECSConnection extends Thread {
 
 	return request;
 
+    }
+
+    private byte[] hashIP(String address, int port) {
+	try {
+	    String valueToHash = address + ":" + Integer.toString(port);	
+	    MessageDigest md = MessageDigest.getInstance("MD5");
+	    md.update(valueToHash.getBytes());
+	    return md.digest();
+	} catch (Exception e) {
+	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
+	}
     }
 
 }
