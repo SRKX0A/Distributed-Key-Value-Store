@@ -96,181 +96,199 @@ public class ECSClientConnection extends Thread {
      */
     public void handleInitialization(ECSMessage request) {
 
-	String address = request.getAddress();
-	int port = request.getPort();
+	synchronized(ECS.class) {
 
-	KeyRange serverKeyRange = this.ecs.addNode(address, port);
-	this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
-	TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
+	    String address = request.getAddress();
+	    int port = request.getPort();
 
-	if (this.ecs.getNumNodes() == 1) {
-	    this.sendUpdateMessageToAllNodes(address, port);
-	    return;
-	}
+	    KeyRange serverKeyRange = this.ecs.addNode(address, port);
+	    this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
+	    TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
 
-	byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
+	    if (this.ecs.getNumNodes() == 1) {
+		this.sendUpdateMessageToAllNodes(address, port);
+		return;
+	    }
 
-	if (successorRingPosition == null) {
-	    successorRingPosition = updatedMetadata.firstKey();
-	}
+	    byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
 
-	KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
+	    if (successorRingPosition == null) {
+		successorRingPosition = updatedMetadata.firstKey();
+	    }
 
-	HashMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
+	    KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
 
-	try {
-	    connections.get(successorRingPosition).info = new RequestPendingInfo(address, port);
-	    connections.get(successorRingPosition).sendMessage(StatusType.METADATA_LOCK, address, port, updatedMetadata, successorRingPosition);
-	} catch (Exception e) {
-	    logger.error("Failed to send write lock message to successor: " + e.getMessage());
-	    this.removeNodeFromECSAndConnectionList(successorNodeRange);
-	    this.sendUpdateMessageToAllNodes(address, port);
-	    return;
+	    HashMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
+
+	    try {
+		connections.get(successorRingPosition).info = new RequestPendingInfo(address, port);
+		connections.get(successorRingPosition).sendMessage(StatusType.METADATA_LOCK, address, port, updatedMetadata, successorRingPosition);
+	    } catch (Exception e) {
+		logger.error("Failed to send write lock message to successor: " + e.getMessage());
+		this.removeNodeFromECSAndConnectionList(successorNodeRange);
+		this.sendUpdateMessageToAllNodes(address, port);
+		return;
+	    }
 	}
 
     }
 
     public void handleTermination(ECSMessage request) {
 
-	String address = request.getAddress();
-	int port = request.getPort();
+	synchronized (ECS.class) {
 
-	KeyRange serverKeyRange = this.ecs.removeNode(address, port);
-	byte[] serverRingPosition = serverKeyRange.getRangeFrom();
-	TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
+	    String address = request.getAddress();
+	    int port = request.getPort();
 
-	if (this.ecs.getNumNodes() == 0) {
+	    KeyRange serverKeyRange = this.ecs.removeNode(address, port);
+	    byte[] serverRingPosition = serverKeyRange.getRangeFrom();
+	    TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
+
+	    if (this.ecs.getNumNodes() == 0) {
+		try {
+		    this.sendMessage(StatusType.METADATA_LOCK, null, 0, null, null);
+		} catch (Exception e) {
+		    logger.error("Failed to send write lock message to single terminating node: " + e.getMessage());
+		}
+		this.ecs.getConnections().remove(serverRingPosition);
+		return;
+	    }
+
+	    byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
+
+	    if (successorRingPosition == null) {
+		successorRingPosition = updatedMetadata.firstKey();
+	    }
+
+	    KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
+
+	    String successorAddress = successorNodeRange.getAddress();
+	    int successorPort = successorNodeRange.getPort();
+
 	    try {
-		this.sendMessage(StatusType.METADATA_LOCK, null, 0, null, null);
+		this.sendMessage(StatusType.METADATA_LOCK, successorAddress, successorPort, updatedMetadata, serverRingPosition);
 	    } catch (Exception e) {
-		logger.error("Failed to send write lock message to single terminating node: " + e.getMessage());
+		logger.error("Failed to send write lock message to terminating node: " + e.getMessage());
+		this.ecs.getConnections().remove(serverRingPosition);
+		this.sendUpdateMessageToAllNodes(address, port);
+		return;
 	    }
-	    this.ecs.getConnections().remove(serverRingPosition);
-	    return;
-	}
 
-	byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
+	    ECSMessage writeLockResponse = null;
 
-	if (successorRingPosition == null) {
-	    successorRingPosition = updatedMetadata.firstKey();
-	}
-
-	KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
-
-	String successorAddress = successorNodeRange.getAddress();
-	int successorPort = successorNodeRange.getPort();
-
-	try {
-	    this.sendMessage(StatusType.METADATA_LOCK, successorAddress, successorPort, updatedMetadata, serverRingPosition);
-	} catch (Exception e) {
-	    logger.error("Failed to send write lock message to terminating node: " + e.getMessage());
-	    this.ecs.getConnections().remove(serverRingPosition);
-	    this.sendUpdateMessageToAllNodes(address, port);
-	    return;
-	}
-
-	ECSMessage writeLockResponse = null;
-
-	try {
-	    writeLockResponse = this.receiveMessage(); 
-	    if (writeLockResponse.getStatus() != StatusType.REQ_FIN) {
-		throw new IllegalArgumentException("Expecting REQ_FIN message");	
+	    try {
+		writeLockResponse = this.receiveMessage(); 
+		if (writeLockResponse.getStatus() != StatusType.REQ_FIN) {
+		    throw new IllegalArgumentException("Expecting REQ_FIN message");	
+		}
+	    } catch (Exception e) {
+		logger.error("Failed to receive write lock response from terminating node: " + e.getMessage());
+	    } finally {
+		this.ecs.getConnections().remove(serverRingPosition);
+		this.sendUpdateMessageToAllNodes(address, port);
 	    }
-	} catch (Exception e) {
-	    logger.error("Failed to receive write lock response from terminating node: " + e.getMessage());
-	} finally {
-	    this.ecs.getConnections().remove(serverRingPosition);
-	    this.sendUpdateMessageToAllNodes(address, port);
 	}
 
     }
 
     public void handleRebalance(ECSMessage message) throws Exception {
 
-	if (this.info == null) {
-	    throw new IllegalStateException("REQ_FIN request for connection that has not requested a rebalance!");
-	}
+	synchronized (ECS.class) {
+	    if (this.info == null) {
+		throw new IllegalStateException("REQ_FIN request for connection that has not requested a rebalance!");
+	    }
 
-	this.sendUpdateMessageToAllNodes(this.info.pendingAddress, this.info.pendingPort);
-	this.info = null;	
+	    this.sendUpdateMessageToAllNodes(this.info.pendingAddress, this.info.pendingPort);
+	    this.info = null;	
+	}
 
     }
 
     public void handleIllegalArgumentException(IllegalArgumentException iae) {
 	
-	logger.error("Client message format failure: " + iae.toString());
+	synchronized (ECS.class) {
+	    logger.error("Client message format failure: " + iae.toString());
 
-	try {
-	    this.sendMessage(StatusType.INVALID_REQUEST_TYPE, null, 0, null, null);
-	} catch (Exception e) {
-	    logger.error("Failed to send failure message: " + e.toString()); 
+	    try {
+		this.sendMessage(StatusType.INVALID_REQUEST_TYPE, null, 0, null, null);
+	    } catch (Exception e) {
+		logger.error("Failed to send failure message: " + e.toString()); 
+	    }
 	}
 
     }
 
     public void handleClassNotFoundException(ClassNotFoundException cnfe) {
 
-	logger.error("Client message format failure: " + cnfe.toString());
+	synchronized (ECS.class) {
+	    logger.error("Client message format failure: " + cnfe.toString());
 
-	try {
-	    this.sendMessage(StatusType.INVALID_MESSAGE_FORMAT, null, 0, null, null);
-	} catch (Exception e) {
-	    logger.error("Failed to send failure message: " + e.toString()); 
+	    try {
+		this.sendMessage(StatusType.INVALID_MESSAGE_FORMAT, null, 0, null, null);
+	    } catch (Exception e) {
+		logger.error("Failed to send failure message: " + e.toString()); 
+	    }
 	}
 
     }
 
     public void handleEOFException(EOFException eofe) {
-	logger.debug("Client connection closed: " + eofe.getMessage());
 
-	try {
-	    this.input.close();
-	    this.output.close();	
-	    this.socket.close();
-	} catch (Exception e) {
-	    logger.error("Error: Failed to gracefully close connection: " + e.getMessage());
-	} finally {
-	    byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
-	    this.ecs.getConnections().remove(hashedValue);
-	    this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+	synchronized (ECS.class) {
+	    logger.debug("Client connection closed: " + eofe.getMessage());
 
-	    String sentAddress = this.socket.getInetAddress().getHostName();
-	    int sentPort = this.socket.getPort();
+	    try {
+		this.input.close();
+		this.output.close();	
+		this.socket.close();
+	    } catch (Exception e) {
+		logger.error("Error: Failed to gracefully close connection: " + e.getMessage());
+	    } finally {
+		byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		this.ecs.getConnections().remove(hashedValue);
+		this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
 
-	    if (this.info != null) {
-		sentAddress = this.info.pendingAddress;
-		sentPort = this.info.pendingPort;
+		String sentAddress = this.socket.getInetAddress().getHostName();
+		int sentPort = this.socket.getPort();
+
+		if (this.info != null) {
+		    sentAddress = this.info.pendingAddress;
+		    sentPort = this.info.pendingPort;
+		}
+
+		this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
+
 	    }
-
-	    this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
-
 	}
 
     }
 
     public void handleGeneralException(Exception e) {
-	logger.debug("Client connection failure: " + e.getMessage());
+	
+	synchronized (ECS.class) {
+	    logger.debug("Client connection failure: " + e.getMessage());
 
-	try {
-	    this.input.close();
-	    this.output.close();	
-	    this.socket.close();
-	} catch (Exception ex) {
-	    logger.error("Error: Failed to gracefully close connection: " + ex.getMessage());
-	} finally {
-	    byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
-	    this.ecs.getConnections().remove(hashedValue);
-	    this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+	    try {
+		this.input.close();
+		this.output.close();	
+		this.socket.close();
+	    } catch (Exception ex) {
+		logger.error("Error: Failed to gracefully close connection: " + ex.getMessage());
+	    } finally {
+		byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		this.ecs.getConnections().remove(hashedValue);
+		this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
 
-	    String sentAddress = this.socket.getInetAddress().getHostName();
-	    int sentPort = this.socket.getPort();
+		String sentAddress = this.socket.getInetAddress().getHostName();
+		int sentPort = this.socket.getPort();
 
-	    if (this.info != null) {
-		sentAddress = this.info.pendingAddress;
-		sentPort = this.info.pendingPort;
+		if (this.info != null) {
+		    sentAddress = this.info.pendingAddress;
+		    sentPort = this.info.pendingPort;
+		}
+
+		this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
 	    }
-
-	    this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
 	}
 
     }

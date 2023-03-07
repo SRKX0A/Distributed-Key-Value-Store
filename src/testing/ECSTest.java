@@ -98,13 +98,6 @@ public class ECSTest extends TestCase {
 	    ex = e;
 	} finally {
 	    kvServer.close();
-	    try {
-		Thread.sleep(500);
-	    } catch (Exception e) {
-		ex = e;
-	    }
-
-	    assertNull(ex);
 	    ecs.close();
 	}
 
@@ -180,25 +173,7 @@ public class ECSTest extends TestCase {
 	assertNull(ex);
 
 	kvServer2.close();
-
-	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    ex = e;
-	}
-
-	assertNull(ex);
-
 	kvServer1.close();
-
-	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    ex = e;
-	}
-
-	assertNull(ex);
-
 	ecs.close();
 
 	File[] testing_data = (new File("src/testing/data")).listFiles();

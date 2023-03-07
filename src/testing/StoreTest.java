@@ -27,22 +27,8 @@ public class StoreTest extends TestCase {
     public void setUp() {
 
 	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
-	try {
 	    ecs = new ECS("localhost", 0); 
 	    ecs.start();
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
-	try {
-	    Thread.sleep(500);
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
@@ -86,32 +72,8 @@ public class StoreTest extends TestCase {
     public void tearDown() {
 
 	kvStore.disconnect();
-
-	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
 	kvServer2.close();
-
-	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
 	kvServer1.close();
-
-	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
 	ecs.close();
 	
 	File[] testing_data = (new File("src/testing/data")).listFiles();
