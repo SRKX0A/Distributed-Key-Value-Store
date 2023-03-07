@@ -78,6 +78,7 @@ public class ECSConnection extends Thread {
 	    if (this.kvServer.getHostname().equals(address) && this.kvServer.getPort() == port) {
 		logger.debug("Got initial metadata update from ECS, turning state to available");
 		this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
+		this.kvServer.startReplicationTimer();
 	    } else {
 		logger.debug("Got metadata update from ECS");
 	    }
@@ -88,53 +89,6 @@ public class ECSConnection extends Thread {
 
 	if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
 	    return;
-	}
-
-	var metadata = message.getMetadata();
-
-	var serverRingPosition = this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort());
-	var serverKeyRange = metadata.get(serverRingPosition);
-
-	var firstReplica = metadata.higherEntry(serverRingPosition);
-
-	if (firstReplica == null) {
-	    firstReplica = metadata.firstEntry();
-	}
-
-	var firstReplicaKeyRange = firstReplica.getValue();
-
-	if (serverKeyRange.equals(firstReplicaKeyRange)) {
-	    return;
-	}
-
-	try {
-	    this.kvServer.dumpCacheToDisk();
-	    this.kvServer.compactLogs();
-	    this.kvServer.clearOldLogs();
-	    this.kvServer.sendReplicatedLogsToServer(firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
-	} catch (Exception e) {
-	    logger.error("Failed to complete replication on first replica: " + e.getMessage());
-	}
-
-	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
-
-	if (secondReplica == null) {
-	    secondReplica = metadata.firstEntry();
-	}
-
-	var secondReplicaKeyRange = secondReplica.getValue();
-
-	if (serverKeyRange.equals(secondReplicaKeyRange)) {
-	    return;
-	}
-
-	try {
-	    this.kvServer.dumpCacheToDisk();
-	    this.kvServer.compactLogs();
-	    this.kvServer.clearOldLogs();
-	    this.kvServer.sendReplicatedLogsToServer(secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
-	} catch (Exception e) {
-	    logger.error("Failed to complete replication on second replica: " + e.getMessage());
 	}
 
     }
@@ -175,6 +129,8 @@ public class ECSConnection extends Thread {
 
     public void shutdown() {
 
+	this.kvServer.stopReplicationTimer();
+
 	try {
 	    this.sendMessage(ECSMessage.StatusType.TERM_REQ, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
 	} catch (Exception e) {
@@ -214,16 +170,4 @@ public class ECSConnection extends Thread {
 	return request;
 
     }
-
-    private byte[] hashIP(String address, int port) {
-	try {
-	    String valueToHash = address + ":" + Integer.toString(port);	
-	    MessageDigest md = MessageDigest.getInstance("MD5");
-	    md.update(valueToHash.getBytes());
-	    return md.digest();
-	} catch (Exception e) {
-	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
-	}
-    }
-
 }

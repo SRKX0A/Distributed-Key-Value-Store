@@ -44,6 +44,8 @@ public class KVServer extends Thread implements IKVServer {
 
     private volatile TreeMap<byte[], KeyRange> metadata;
 
+    private Timer replicationTimer;
+
     /**
     * Start KV Server at given port
     * @param port given port for storage server to operate
@@ -70,6 +72,7 @@ public class KVServer extends Thread implements IKVServer {
         this.memtableLock = new Object();
 
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
+	this.replicationTimer = new Timer("Replication Timer");
 
         Scanner scanner = new Scanner(this.wal);
         scanner.useDelimiter("\r\n");
@@ -645,37 +648,104 @@ public class KVServer extends Thread implements IKVServer {
 		message = Connection.receiveMessage(input);
 	    } catch (Exception e) {
 		replicatedWriter.close();
-
-		File storeDir = new File(this.directory);
-
-		File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
-		    public boolean accept(File dir, String name) {
-			return name.startsWith("ReplicatedKVServerStoreFile_");
-		    }
-		});
-
-		for (File file: replicatedFiles) {
-		    file.delete();
-		}
-
-		File[] newReplicatedFiles = storeDir.listFiles(new FilenameFilter() {
-		    public boolean accept(File dir, String name) {
-			return name.startsWith("NewReplicatedKVServerStoreFile_");
-		    }
-		});
-
-		for (File file: newReplicatedFiles) {
-		    String filename = file.getName();
-		    File newFile = new File(this.directory, filename.substring(3));
-		    file.renameTo(newFile);
-		}
-	
 		throw e;
 	    }
 
 	}
 
 
+    }
+
+    public void clearOldReplicatedLogs() {
+
+        logger.info("Clearing old replicated logs");
+
+	File storeDir = new File(this.directory);
+
+	File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("ReplicatedKVServerStoreFile_");
+	    }
+	});
+
+	for (File file: replicatedFiles) {
+	    file.delete();
+	}
+
+	File[] newReplicatedFiles = storeDir.listFiles(new FilenameFilter() {
+	    public boolean accept(File dir, String name) {
+		return name.startsWith("NewReplicatedKVServerStoreFile_");
+	    }
+	});
+
+	for (File file: newReplicatedFiles) {
+	    String filename = file.getName();
+	    File newFile = new File(this.directory, filename.substring(3));
+	    file.renameTo(newFile);
+	}
+
+	return;
+
+    }
+
+    public void replicate() {
+
+	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
+	var serverKeyRange = this.metadata.get(serverRingPosition);
+
+	var firstReplica = this.metadata.higherEntry(serverRingPosition);
+
+	if (firstReplica == null) {
+	    firstReplica = this.metadata.firstEntry();
+	}
+
+	var firstReplicaKeyRange = firstReplica.getValue();
+
+	if (serverKeyRange.equals(firstReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.dumpCacheToDisk();
+	    this.compactLogs();
+	    this.clearOldLogs();
+	    this.sendReplicatedLogsToServer(firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.error("Failed to complete replication on first replica: " + e.getMessage());
+	}
+
+	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
+
+	if (secondReplica == null) {
+	    secondReplica = metadata.firstEntry();
+	}
+
+	var secondReplicaKeyRange = secondReplica.getValue();
+
+	if (serverKeyRange.equals(secondReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.dumpCacheToDisk();
+	    this.compactLogs();
+	    this.clearOldLogs();
+	    this.sendReplicatedLogsToServer(secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.error("Failed to complete replication on second replica: " + e.getMessage());
+	}
+
+	this.clearOldReplicatedLogs();
+
+    }
+
+    public void startReplicationTimer() {
+	KVServerReplicationTask replicationTask = new KVServerReplicationTask(this);
+	this.replicationTimer.schedule(replicationTask, 1000L, 15000L);
+    }
+
+    public void stopReplicationTimer() {
+	this.replicationTimer.cancel();
     }
 
     @Override
@@ -804,6 +874,21 @@ public class KVServer extends Thread implements IKVServer {
 	} catch (Exception e) {
 	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
 	}
+    }
+
+}
+
+class KVServerReplicationTask extends TimerTask {
+
+    private KVServer kvServer;
+
+    public KVServerReplicationTask(KVServer kvServer) {
+	this.kvServer = kvServer;
+    }
+
+    @Override
+    public void run() {
+	this.kvServer.replicate();
     }
 
 }
