@@ -44,7 +44,8 @@ public class Connection extends Thread {
 
 		if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING &&
 		    request.getStatus() != StatusType.SEND_KV &&
-		    request.getStatus() != StatusType.REPLICATE_KV) {
+		    request.getStatus() != StatusType.REPLICATE_KV_1 &&
+		    request.getStatus() != StatusType.REPLICATE_KV_2) {
 		    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 		    continue;
 		}
@@ -57,8 +58,10 @@ public class Connection extends Thread {
 		    this.handleKeyrangeRequest(request);
 		} else if (request.getStatus() == StatusType.SEND_KV) {
 		    this.handleSendKVRequest(request);
-		} else if (request.getStatus() == StatusType.REPLICATE_KV) {
+		} else if (request.getStatus() == StatusType.REPLICATE_KV_1 || request.getStatus() == StatusType.REPLICATE_KV_2) {
 		    this.handleReplicateKVRequest(request);
+		} else if (request.getStatus() == StatusType.REPLICATE_KV_FIN) {
+		    continue;
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}

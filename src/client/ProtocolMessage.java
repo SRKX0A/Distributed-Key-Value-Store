@@ -45,13 +45,19 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = KVMessage.StatusType.GET;
 	} else if (status.toLowerCase().equals("send_kv")) {
 	    protocolStatus = KVMessage.StatusType.SEND_KV;
-	} else if (status.toLowerCase().equals("replicate_kv")) {
-	    protocolStatus = KVMessage.StatusType.REPLICATE_KV;
+	} else if (status.toLowerCase().equals("send_kv_fin")) {
+	    protocolStatus = KVMessage.StatusType.SEND_KV_FIN;
+	} else if (status.toLowerCase().equals("replicate_kv_1")) {
+	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_1;
+	} else if (status.toLowerCase().equals("replicate_kv_2")) {
+	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_2;
+	} else if (status.toLowerCase().equals("replicate_kv_fin")) {
+	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_FIN;
 	} else {
 	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV || protocolStatus == KVMessage.StatusType.REPLICATE_KV) {
+	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV || protocolStatus == KVMessage.StatusType.REPLICATE_KV_1 || protocolStatus == KVMessage.StatusType.REPLICATE_KV_2) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
 
