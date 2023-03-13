@@ -12,6 +12,8 @@ import client.ProtocolMessage;
 import shared.KeyRange;
 import shared.ByteArrayComparator;
 import shared.messages.KVMessage.StatusType;
+import shared.messages.ECSMessage;
+
 
 public class KVServer extends Thread implements IKVServer {
 
@@ -797,6 +799,78 @@ public class KVServer extends Thread implements IKVServer {
 	} catch (Exception e) {
 	    logger.error("Failed to complete replication on second replica: " + e.getMessage());
 	}
+
+    }
+
+    public void recoverIfNecessary(ECSMessage message) throws Exception {
+	
+	String address = message.getAddress();
+	int port = message.getPort();
+
+	byte[] serverRingPosition = message.getRingPosition();
+	byte[] targetRingPosition = this.hashIP(address, port);
+
+	var updatedMetadata = message.getMetadata();	
+
+	if (updatedMetadata.get(targetRingPosition) != null) {
+	    return;
+	}
+
+	var responsibleServerRingPosition = updatedMetadata.ceilingKey(targetRingPosition);
+
+	if (responsibleServerRingPosition == null) {
+	    responsibleServerRingPosition = updatedMetadata.firstKey();
+	}
+
+	if (!Arrays.equals(serverRingPosition, targetRingPosition)) {
+	    return;
+	}
+
+	KeyRange serverKeyRange = updatedMetadata.get(serverRingPosition);
+
+	File recoveredFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	recoveredFile.createNewFile();
+	BufferedWriter recoveredWriter = new BufferedWriter(new FileWriter(recoveredFile, true));
+	int recoveredKeyCount = 0;
+
+        File storeDir = new File(this.directory);
+
+        File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("Replica1KVServerStoreFile_") || name.startsWith("Replica2KVServerStoreFile_");
+            }
+        });
+
+	for (File file: replicatedFiles) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String test_key = scanner.next();
+                String test_value = scanner.next();
+
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                md.update(test_key.getBytes());
+                byte[] keyDigest = md.digest();
+
+                if (serverKeyRange.withinKeyRange(keyDigest)) {
+
+                    recoveredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
+                    recoveredKeyCount++;
+
+                    if (recoveredKeyCount >= this.cacheSize) {
+                        recoveredWriter.close();	
+                        recoveredFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+                        recoveredFile.createNewFile();
+                        recoveredWriter = new BufferedWriter(new FileWriter(recoveredFile, true));
+                        recoveredKeyCount = 0;
+                    }
+
+                }
+            }
+            scanner.close();
+	}
+
+	recoveredWriter.close();
 
     }
 
