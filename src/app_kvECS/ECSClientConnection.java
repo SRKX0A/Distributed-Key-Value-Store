@@ -13,17 +13,6 @@ import shared.messages.ECSMessage.StatusType;
 
 public class ECSClientConnection extends Thread {
 
-    public class RequestPendingInfo {
-	private String pendingAddress;
-	private int pendingPort;
-
-	public RequestPendingInfo(String pendingAddress, int pendingPort) {
-	    this.pendingAddress = pendingAddress;
-	    this.pendingPort = pendingPort;
-	}
-
-    }
-
     private static Logger logger = Logger.getRootLogger();
 
     private ECS ecs;
@@ -31,8 +20,6 @@ public class ECSClientConnection extends Thread {
     private Socket socket;
     private ObjectInputStream input;
     private ObjectOutputStream output;
-
-    private RequestPendingInfo info;
 
     private String serverAddress;
     private int serverPort;
@@ -44,7 +31,6 @@ public class ECSClientConnection extends Thread {
 	this.output = new ObjectOutputStream(this.socket.getOutputStream());
 	this.input = new ObjectInputStream(this.socket.getInputStream());
 
-	this.info = null;
     }
 
     @Override 
@@ -56,22 +42,13 @@ public class ECSClientConnection extends Thread {
 
 		ECSMessage request = this.receiveMessage();
 
-		if (request.getStatus() == StatusType.REQ_FIN) {
-		    this.handleRebalance(request);
-		    continue;
-		}
-
-		synchronized (ECSClientConnection.class) {
-
-		    if (request.getStatus() == StatusType.INIT_REQ) {
-			this.handleInitialization(request);
-		    } else if (request.getStatus() == StatusType.TERM_REQ) {
-			this.handleTermination(request);
-			return;
-		    } else {
-			throw new IllegalArgumentException("Error: Server messages must be one of INIT_REQ, TERM_REQ, or REQ_FIN");
-		    }
-
+		if (request.getStatus() == StatusType.INIT_REQ) {
+		    this.handleInitialization(request);
+		} else if (request.getStatus() == StatusType.TERM_REQ) {
+		    this.handleTermination(request);
+		    return;
+		} else {
+		    throw new IllegalArgumentException("Error: Server messages must be one of INIT_REQ, TERM_REQ, or REQ_FIN");
 		}
 
 	    } catch(IllegalArgumentException iae) {
@@ -104,37 +81,51 @@ public class ECSClientConnection extends Thread {
 	    this.serverAddress = request.getAddress();
 	    this.serverPort = request.getPort();
 
-	    String address = serverAddress;
-	    int port = serverPort;
-
-	    KeyRange serverKeyRange = this.ecs.addNode(address, port);
-	    this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
-	    TreeMap<byte[], KeyRange> updatedMetadata = this.ecs.getMetadata();
-
-	    if (this.ecs.getNumNodes() == 1) {
-		this.sendUpdateMessageToAllNodes(address, port);
+	    if (this.ecs.getNumNodes() == 0) {
+		KeyRange serverKeyRange = this.ecs.addNode(this.serverAddress, this.serverPort);
+		this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
+		this.sendUpdateMessageToAllNodes(this.serverAddress, this.serverPort);
 		return;
 	    }
 
-	    byte[] successorRingPosition = updatedMetadata.higherKey(serverKeyRange.getRangeFrom());
+	    byte[] ringPosition = this.hashIP(this.serverAddress, this.serverPort);
+	    var successorEntry = this.ecs.getMetadata().higherEntry(ringPosition);
 
-	    if (successorRingPosition == null) {
-		successorRingPosition = updatedMetadata.firstKey();
+	    if (successorEntry == null) {
+		successorEntry = this.ecs.getMetadata().firstEntry();
 	    }
 
-	    KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
+	    byte[] successorRingPosition = successorEntry.getKey();
+	    KeyRange successorKeyRange = successorEntry.getValue();
 
-	    TreeMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
+	    ECSClientConnection connection = this.ecs.getConnections().get(successorRingPosition);
 
 	    try {
-		connections.get(successorRingPosition).info = new RequestPendingInfo(address, port);
-		connections.get(successorRingPosition).sendMessage(StatusType.METADATA_LOCK, address, port, updatedMetadata, successorRingPosition);
+		connection.sendMessage(StatusType.METADATA_LOCK, this.serverAddress, this.serverPort, this.ecs.getMetadata(), successorRingPosition);
 	    } catch (Exception e) {
 		logger.error("Failed to send write lock message to successor: " + e.getMessage());
-		this.removeNodeFromECSAndConnectionList(successorNodeRange);
-		this.sendUpdateMessageToAllNodes(address, port);
+		this.removeNodeFromECSAndConnectionList(successorKeyRange);
+		this.sendUpdateMessageToAllNodes(this.serverAddress, this.serverPort);
+		this.handleInitialization(request);
 		return;
 	    }
+
+	    try {
+		ECSMessage response = this.receiveMessage();
+		if (response.getStatus() != StatusType.REQ_FIN) {
+		    throw new IllegalArgumentException("Invalid response - expecting REQ_FIN, got " + response.getStatus().toString());
+		}
+	    } catch (Exception e) {
+		logger.error("Failed to receive REQ_FIN message from initializing server: " + e.getMessage());
+		return;
+	    }
+
+	    KeyRange serverKeyRange = this.ecs.addNode(this.serverAddress, this.serverPort);
+	    this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
+	    this.sendUpdateMessageToAllNodes(this.serverAddress, this.serverPort);
+	    
+	    return;
+
 	}
 
     }
@@ -197,19 +188,6 @@ public class ECSClientConnection extends Thread {
 
     }
 
-    public void handleRebalance(ECSMessage message) throws Exception {
-
-	synchronized (ECS.class) {
-	    if (this.info == null) {
-		throw new IllegalStateException("REQ_FIN request for connection that has not requested a rebalance!");
-	    }
-
-	    this.sendUpdateMessageToAllNodes(this.info.pendingAddress, this.info.pendingPort);
-	    this.info = null;	
-	}
-
-    }
-
     public void handleIllegalArgumentException(IllegalArgumentException iae) {
 	
 	synchronized (ECS.class) {
@@ -250,17 +228,17 @@ public class ECSClientConnection extends Thread {
 	    } catch (Exception e) {
 		logger.error("Error: Failed to gracefully close connection: " + e.getMessage());
 	    } finally {
+
+		if (this.serverAddress == null || this.serverPort == 0) {
+		    return;
+		}
+
 		byte[] hashedValue = this.hashIP(this.serverAddress, this.serverPort);
 		this.ecs.getConnections().remove(hashedValue);
 		this.ecs.removeNode(this.serverAddress, this.serverPort);
 
 		String sentAddress = this.serverAddress;
 		int sentPort = this.serverPort;
-
-		if (this.info != null) {
-		    sentAddress = this.info.pendingAddress;
-		    sentPort = this.info.pendingPort;
-		}
 
 		this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
 
@@ -281,17 +259,17 @@ public class ECSClientConnection extends Thread {
 	    } catch (Exception ex) {
 		logger.error("Error: Failed to gracefully close connection: " + ex.getMessage());
 	    } finally {
+
+		if (this.serverAddress == null || this.serverPort == 0) {
+		    return;
+		}
+
 		byte[] hashedValue = this.hashIP(this.serverAddress, this.serverPort);
 		this.ecs.getConnections().remove(hashedValue);
 		this.ecs.removeNode(this.serverAddress, this.serverPort);
 
 		String sentAddress = this.serverAddress;
 		int sentPort = this.serverPort;
-
-		if (this.info != null) {
-		    sentAddress = this.info.pendingAddress;
-		    sentPort = this.info.pendingPort;
-		}
 
 		this.sendUpdateMessageToAllNodes(sentAddress, sentPort);
 	    }

@@ -39,31 +39,62 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String status = msgString.substring(0, indexOfFirstSpace);
 
-	if (status.toLowerCase().equals("put")) {
-	    protocolStatus = KVMessage.StatusType.PUT;
-	} else if (status.toLowerCase().equals("get")) {
-	    protocolStatus = KVMessage.StatusType.GET;
-	} else if (status.toLowerCase().equals("send_kv")) {
-	    protocolStatus = KVMessage.StatusType.SEND_KV;
-	} else if (status.toLowerCase().equals("send_kv_fin")) {
-	    protocolStatus = KVMessage.StatusType.SEND_KV_FIN;
-	} else if (status.toLowerCase().equals("replicate_kv_handshake")) {
-	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE;
-	} else if (status.toLowerCase().equals("replicate_kv_handshake_ack")) {
-	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE_ACK;
-	} else if (status.toLowerCase().equals("replicate_kv_handshake_nack")) {
-	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE_NACK;
-	} else if (status.toLowerCase().equals("replicate_kv_1")) {
-	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_1;
-	} else if (status.toLowerCase().equals("replicate_kv_2")) {
-	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_2;
-	} else if (status.toLowerCase().equals("replicate_kv_fin")) {
-	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_FIN;
-	} else {
-	    throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
+	switch (status.toLowerCase()) {
+	    case "put":
+		protocolStatus = KVMessage.StatusType.PUT;
+		break;
+	    case "get":
+		protocolStatus = KVMessage.StatusType.GET;
+		break;
+	    case "server_init":
+		protocolStatus = KVMessage.StatusType.SERVER_INIT;
+		break;
+	    case "send_kv":
+		protocolStatus = KVMessage.StatusType.SEND_KV;
+		break;
+	    case "send_kv_fin":
+		protocolStatus = KVMessage.StatusType.SEND_KV_FIN;
+		break;
+	    case "send_replica_kv_1":
+		protocolStatus = KVMessage.StatusType.SEND_REPLICA_KV_1;
+		break;
+	    case "send_replica_kv_1_fin":
+		protocolStatus = KVMessage.StatusType.SEND_REPLICA_KV_1_FIN;
+		break;
+	    case "send_replica_kv_2":
+		protocolStatus = KVMessage.StatusType.SEND_REPLICA_KV_2;
+		break;
+	    case "send_replica_kv_2_fin":
+		protocolStatus = KVMessage.StatusType.SEND_REPLICA_KV_2_FIN;
+		break;
+	    case "replicate_kv_handshake":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_HANDSHAKE;
+		break;
+	    case "replicate_kv_handshake_ack":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_HANDSHAKE_ACK;
+		break;
+	    case "replicate_kv_handshake_nack":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_HANDSHAKE_NACK;
+		break;
+	    case "replicate_kv_1":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_1;
+		break;
+	    case "replicate_kv_2":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_2;
+		break;
+	    case "replicate_kv_fin":
+		protocolStatus = KVMessage.StatusType.REPLICATE_KV_FIN;
+		break;
+	    default:
+		throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
 
-	if (protocolStatus == KVMessage.StatusType.PUT || protocolStatus == KVMessage.StatusType.SEND_KV || protocolStatus == KVMessage.StatusType.REPLICATE_KV_1 || protocolStatus == KVMessage.StatusType.REPLICATE_KV_2) {
+	if (protocolStatus == KVMessage.StatusType.PUT
+	    || protocolStatus == KVMessage.StatusType.SEND_KV
+	    || protocolStatus == KVMessage.StatusType.SEND_REPLICA_KV_1
+	    || protocolStatus == KVMessage.StatusType.SEND_REPLICA_KV_2
+	    || protocolStatus == KVMessage.StatusType.REPLICATE_KV_1
+	    || protocolStatus == KVMessage.StatusType.REPLICATE_KV_2) {
 
 	    int indexOfSecondSpace = msgString.indexOf(" ", indexOfFirstSpace + 1);
 

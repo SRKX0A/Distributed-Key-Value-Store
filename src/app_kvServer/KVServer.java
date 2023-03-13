@@ -506,12 +506,17 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    public void sendFilteredLogsToServer(String address, int port) throws Exception {
+    public void sendAllLogsToServer(String address, int port) throws Exception {
 
-	logger.info(String.format("Sending filtered logs to <%s,%d>", address, port));
+	logger.info(String.format("Sending logs to <%s,%d>", address, port));
 	
 	Socket serverSocket = new Socket(address, port);
 	OutputStream output = serverSocket.getOutputStream();
+
+	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.SERVER_INIT, null, null);
+	output.write(initialMessage.getBytes());
+	output.flush();
+
 
         File storeDir = new File(this.directory);
 
@@ -530,7 +535,7 @@ public class KVServer extends Thread implements IKVServer {
 
 		ProtocolMessage message = new ProtocolMessage(StatusType.SEND_KV, key, value);
 
-		logger.info(String.format("Sending key = %s, value = %s", key, value));
+		logger.debug(String.format("Sending key = %s, value = %s", key, value));
 
 		output.write(message.getBytes());
 		output.flush();
@@ -542,23 +547,92 @@ public class KVServer extends Thread implements IKVServer {
 	ProtocolMessage finishMessage = new ProtocolMessage(StatusType.SEND_KV_FIN, null, null);
 	output.write(finishMessage.getBytes());
 	output.flush();
+
+
+        File[] replica1Files = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("Replica1KVServerStoreFile_");
+            }
+        });
+
+	for (File file: replica1Files) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String key = scanner.next();
+                String value = scanner.next();
+
+		ProtocolMessage message = new ProtocolMessage(StatusType.SEND_REPLICA_KV_1, key, value);
+
+		logger.debug(String.format("Sending replica1 key = %s, value = %s", key, value));
+
+		output.write(message.getBytes());
+		output.flush();
+
+	    }
+	    scanner.close();
+	}
+
+	finishMessage = new ProtocolMessage(StatusType.SEND_REPLICA_KV_1_FIN, null, null);
+	output.write(finishMessage.getBytes());
+	output.flush();
+
+
+        File[] replica2Files = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("Replica2KVServerStoreFile_");
+            }
+        });
+
+	for (File file: replica2Files) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String key = scanner.next();
+                String value = scanner.next();
+
+		ProtocolMessage message = new ProtocolMessage(StatusType.SEND_REPLICA_KV_2, key, value);
+
+		logger.debug(String.format("Sending replica2 key = %s, value = %s", key, value));
+
+		output.write(message.getBytes());
+		output.flush();
+
+	    }
+	    scanner.close();
+	}
+
+	finishMessage = new ProtocolMessage(StatusType.SEND_REPLICA_KV_2_FIN, null, null);
+	output.write(finishMessage.getBytes());
+	output.flush();
 	
 	serverSocket.close();
 
     }
 
-    public void receiveFilteredLogsFromServer(InputStream input, OutputStream output, ProtocolMessage initialMessage) throws Exception {
+    public void receiveAllLogsFromServer(InputStream input, OutputStream output, ProtocolMessage initialMessage) throws Exception {
 
-	logger.info("Receiving SEND_KV messages from server");
+	logger.info("Receiving logs from server");
 
 	File receivedFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
 	receivedFile.createNewFile();
 	BufferedWriter receivedWriter = new BufferedWriter(new FileWriter(receivedFile, true));
 	int keyCount = 0;
 
-	ProtocolMessage message = initialMessage;
+	ProtocolMessage message = null;
 
 	while (true) {
+
+	    try {
+		message = Connection.receiveMessage(input);
+		if (message.getStatus() == StatusType.SEND_KV_FIN) {
+		    receivedWriter.close();
+		    break;
+		}
+	    } catch (Exception e) {
+		receivedWriter.close();
+		throw e;
+	    }
 
 	    String key = message.getKey();
 	    String value = message.getValue();
@@ -574,19 +648,77 @@ public class KVServer extends Thread implements IKVServer {
 		keyCount = 0;
 	    }
 
+	}
+
+	File receivedReplica1File = new File(this.directory, "Replica1KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	receivedReplica1File.createNewFile();
+	BufferedWriter receivedReplica1Writer = new BufferedWriter(new FileWriter(receivedReplica1File, true));
+	int receivedReplica1keyCount = 0;
+
+	while (true) {
+
 	    try {
 		message = Connection.receiveMessage(input);
-		if (message.getStatus() == StatusType.SEND_KV_FIN) {
-		    receivedWriter.close();
+		if (message.getStatus() == StatusType.SEND_REPLICA_KV_1_FIN) {
+		    receivedReplica1Writer.close();
 		    break;
 		}
 	    } catch (Exception e) {
-		receivedWriter.close();
+		receivedReplica1Writer.close();
 		throw e;
+	    }
+
+	    String key = message.getKey();
+	    String value = message.getValue();
+	    
+	    receivedReplica1Writer.write(String.format("%s\r\n%s\r\n", key, value));
+	    receivedReplica1keyCount++;
+
+	    if (receivedReplica1keyCount >= this.cacheSize) {
+		receivedReplica1Writer.close();
+		receivedReplica1File = new File(this.directory, "Replica1KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+		receivedReplica1File.createNewFile();
+		receivedReplica1Writer = new BufferedWriter(new FileWriter(receivedReplica1File, true));
+		receivedReplica1keyCount = 0;
 	    }
 
 	}
 
+	File receivedReplica2File = new File(this.directory, "Replica2KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	receivedReplica2File.createNewFile();
+	BufferedWriter receivedReplica2Writer = new BufferedWriter(new FileWriter(receivedReplica2File, true));
+	int receivedReplica2keyCount = 0;
+
+	while (true) {
+
+	    try {
+		message = Connection.receiveMessage(input);
+		if (message.getStatus() == StatusType.SEND_REPLICA_KV_2_FIN) {
+		    receivedReplica2Writer.close();
+		    break;
+		}
+	    } catch (Exception e) {
+		receivedReplica2Writer.close();
+		throw e;
+	    }
+
+	    String key = message.getKey();
+	    String value = message.getValue();
+	    
+	    receivedReplica2Writer.write(String.format("%s\r\n%s\r\n", key, value));
+	    receivedReplica2keyCount++;
+
+	    if (receivedReplica2keyCount >= this.cacheSize) {
+		receivedReplica2Writer.close();
+		receivedReplica2File = new File(this.directory, "Replica2KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+		receivedReplica2File.createNewFile();
+		receivedReplica2Writer = new BufferedWriter(new FileWriter(receivedReplica2File, true));
+		receivedReplica2keyCount = 0;
+	    }
+
+	}
+
+	this.ecsConnection.initializationFinished();
 
     }
 
@@ -622,7 +754,7 @@ public class KVServer extends Thread implements IKVServer {
 
 		    ProtocolMessage message = new ProtocolMessage(status, key, value);
 
-		    logger.info(String.format("Replicating key = %s, value = %s", key, value));
+		    logger.debug(String.format("Replicating key = %s, value = %s", key, value));
 
 		    output.write(message.getBytes());
 		    output.flush();
@@ -753,7 +885,7 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    synchronized public void replicate() {
+    public synchronized void replicate() {
 
 	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
 	var serverKeyRange = this.metadata.get(serverRingPosition);
@@ -776,7 +908,7 @@ public class KVServer extends Thread implements IKVServer {
 	    this.clearOldLogs();
 	    this.sendReplicatedLogsToServer(StatusType.REPLICATE_KV_1, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
 	} catch (Exception e) {
-	    logger.error("Failed to complete replication on first replica: " + e.getMessage());
+	    logger.warn("Failed to complete replication on first replica: " + e.getMessage());
 	}
 
 	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
@@ -797,7 +929,7 @@ public class KVServer extends Thread implements IKVServer {
 	    this.clearOldLogs();
 	    this.sendReplicatedLogsToServer(StatusType.REPLICATE_KV_2, secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
 	} catch (Exception e) {
-	    logger.error("Failed to complete replication on second replica: " + e.getMessage());
+	    logger.warn("Failed to complete replication on second replica: " + e.getMessage());
 	}
 
     }
@@ -911,8 +1043,6 @@ public class KVServer extends Thread implements IKVServer {
 
 	this.replicationTimer.cancel();
 
-        this.online = false;
-
         try {
 
 	    if (this.clientSocket != null) {
@@ -934,6 +1064,8 @@ public class KVServer extends Thread implements IKVServer {
 	} catch (Exception e) {
 	    logger.error("Could not gracefully close ECS socket: " + e.getMessage());
 	}
+
+        this.online = false;
 
     }
 
@@ -986,12 +1118,13 @@ public class KVServer extends Thread implements IKVServer {
     public void run() {
 
 	try {
+	    this.online = true;
 	    this.ecsConnection = new ECSConnection(this);
 	    this.ecsConnection.start();
-	    this.online = true;
 	} catch (Exception e) {
 	    logger.error("Could not connect to ECS server: " + e.getMessage());
 	    logger.info("Server stopped...");
+	    this.close();	
 	    return;
 	}
 

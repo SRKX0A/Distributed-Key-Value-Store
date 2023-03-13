@@ -48,8 +48,7 @@ public class Connection extends Thread {
 		}
 
 		if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING &&
-		    request.getStatus() != StatusType.SEND_KV &&
-		    request.getStatus() != StatusType.SEND_KV_FIN &&
+		    request.getStatus() != StatusType.SERVER_INIT &&
 		    request.getStatus() != StatusType.REPLICATE_KV_HANDSHAKE) {
 		    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 		    continue;
@@ -61,12 +60,10 @@ public class Connection extends Thread {
 		    this.handleGetRequest(request); 
 		} else if (request.getStatus() == StatusType.KEYRANGE) {
 		    this.handleKeyrangeRequest(request);
-		} else if (request.getStatus() == StatusType.SEND_KV) {
+		} else if (request.getStatus() == StatusType.SERVER_INIT) {
 		    this.handleSendKVRequest(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
 		    this.handleReplicateKVRequest(request);
-		} else if (request.getStatus() == StatusType.SEND_KV_FIN) {
-		    continue;
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}
@@ -134,7 +131,7 @@ public class Connection extends Thread {
 
     public void handleSendKVRequest(KVMessage request) throws Exception {
 
-	this.kvServer.receiveFilteredLogsFromServer(this.input, this.output, (ProtocolMessage) request);
+	this.kvServer.receiveAllLogsFromServer(this.input, this.output, (ProtocolMessage) request);
 
     }
 
