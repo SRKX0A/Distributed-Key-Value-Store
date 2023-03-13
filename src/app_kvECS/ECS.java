@@ -21,14 +21,14 @@ public class ECS extends Thread {
     private int numNodes; 
 
     private volatile TreeMap<byte[], KeyRange> metadata;
-    private volatile HashMap<byte[], ECSClientConnection> connections;
+    private volatile TreeMap<byte[], ECSClientConnection> connections;
 
     public ECS(String address, int port) throws IOException {
 
 	this.numNodes = 0;
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
 
-	this.connections = new HashMap<byte[], ECSClientConnection>();
+	this.connections = new TreeMap<byte[], ECSClientConnection>(new ByteArrayComparator());
 
 	logger.info("ECS starting...");
 	this.socket = new ServerSocket(port, 0, InetAddress.getByName(address));
@@ -128,7 +128,7 @@ public class ECS extends Thread {
 	return this.metadata;
     }
 
-    public HashMap<byte[], ECSClientConnection> getConnections() {
+    public TreeMap<byte[], ECSClientConnection> getConnections() {
 	return this.connections;
     }
 

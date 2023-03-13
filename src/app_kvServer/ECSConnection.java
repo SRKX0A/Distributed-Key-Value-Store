@@ -67,28 +67,19 @@ public class ECSConnection extends Thread {
 
     }
 
-    public void handleMetadataUpdate(ECSMessage message) {
-	
-	String address = message.getAddress();
-	int port = message.getPort();
-
-	this.kvServer.setMetadata(message.getMetadata());
+    public void handleMetadataUpdate(ECSMessage message) throws Exception {
 
 	if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
-	    if (this.kvServer.getHostname().equals(address) && this.kvServer.getPort() == port) {
-		logger.debug("Got initial metadata update from ECS, turning state to available");
-		this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
-		this.kvServer.startReplicationTimer();
-	    } else {
-		logger.debug("Got metadata update from ECS");
-	    }
+	    logger.debug("Got initial metadata update from ECS, turning state to available");
+	    this.kvServer.recoverIfNecessary(message);
+	    this.kvServer.setMetadata(message.getMetadata());
+	    this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
+	    this.kvServer.startReplicationTimer();
 	} else {
 	    logger.debug("Got metadata update from ECS");
+	    this.kvServer.recoverIfNecessary(message);
+	    this.kvServer.setMetadata(message.getMetadata());
 	    this.kvServer.setServerState(KVServer.ServerState.SERVER_AVAILABLE);
-	}
-
-	if (this.kvServer.getServerState() == KVServer.ServerState.SERVER_INITIALIZING) {
-	    return;
 	}
 
     }
@@ -103,7 +94,7 @@ public class ECSConnection extends Thread {
 	    return;
 	}
 
-	this.kvServer.setMetadata(message.getMetadata());
+	//this.kvServer.setMetadata(message.getMetadata());
 	this.kvServer.setServerState(KVServer.ServerState.SERVER_REBALANCING);
 
 	logger.debug("Got write lock message from ECS");

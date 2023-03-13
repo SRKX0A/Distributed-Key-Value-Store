@@ -34,6 +34,9 @@ public class ECSClientConnection extends Thread {
 
     private RequestPendingInfo info;
 
+    private String serverAddress;
+    private int serverPort;
+
     public ECSClientConnection(Socket socket, ECS ecs) throws IOException {
 	this.ecs = ecs;
 
@@ -57,6 +60,9 @@ public class ECSClientConnection extends Thread {
 		    this.handleRebalance(request);
 		    continue;
 		}
+
+		this.serverAddress = request.getAddress();
+		this.serverPort = request.getPort();
 
 		synchronized (ECSClientConnection.class) {
 
@@ -118,7 +124,7 @@ public class ECSClientConnection extends Thread {
 
 	    KeyRange successorNodeRange = updatedMetadata.get(successorRingPosition);
 
-	    HashMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
+	    TreeMap<byte[], ECSClientConnection> connections = this.ecs.getConnections();
 
 	    try {
 		connections.get(successorRingPosition).info = new RequestPendingInfo(address, port);
@@ -244,12 +250,12 @@ public class ECSClientConnection extends Thread {
 	    } catch (Exception e) {
 		logger.error("Error: Failed to gracefully close connection: " + e.getMessage());
 	    } finally {
-		byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		byte[] hashedValue = this.hashIP(this.serverAddress, this.serverPort);
 		this.ecs.getConnections().remove(hashedValue);
-		this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		this.ecs.removeNode(this.serverAddress, this.serverPort);
 
-		String sentAddress = this.socket.getInetAddress().getHostName();
-		int sentPort = this.socket.getPort();
+		String sentAddress = this.serverAddress;
+		int sentPort = this.serverPort;
 
 		if (this.info != null) {
 		    sentAddress = this.info.pendingAddress;
@@ -275,12 +281,12 @@ public class ECSClientConnection extends Thread {
 	    } catch (Exception ex) {
 		logger.error("Error: Failed to gracefully close connection: " + ex.getMessage());
 	    } finally {
-		byte[] hashedValue = this.hashIP(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		byte[] hashedValue = this.hashIP(this.serverAddress, this.serverPort);
 		this.ecs.getConnections().remove(hashedValue);
-		this.ecs.removeNode(this.socket.getInetAddress().getHostName(), this.socket.getPort());
+		this.ecs.removeNode(this.serverAddress, this.serverPort);
 
-		String sentAddress = this.socket.getInetAddress().getHostName();
-		int sentPort = this.socket.getPort();
+		String sentAddress = this.serverAddress;
+		int sentPort = this.serverPort;
 
 		if (this.info != null) {
 		    sentAddress = this.info.pendingAddress;

@@ -720,10 +720,10 @@ public class KVServer extends Thread implements IKVServer {
 	File storeDir = new File(this.directory);
 
 	if (status == StatusType.REPLICATE_KV_1) {
-	    logger.info("Clearing old Replica2 logs");
+	    logger.info("Clearing old Replica1 logs");
 	    replicaPrefix = "Replica1KVServerStoreFile_";
 	} else {
-	    logger.info("Clearing old Replica1 logs");
+	    logger.info("Clearing old Replica2 logs");
 	    replicaPrefix = "Replica2KVServerStoreFile_";
 	}
 
@@ -822,9 +822,11 @@ public class KVServer extends Thread implements IKVServer {
 	    responsibleServerRingPosition = updatedMetadata.firstKey();
 	}
 
-	if (!Arrays.equals(serverRingPosition, targetRingPosition)) {
+	if (!Arrays.equals(serverRingPosition, responsibleServerRingPosition)) {
 	    return;
 	}
+
+	logger.info(String.format("Recovering keys from node <%s:%d> shutdown", address, port));
 
 	KeyRange serverKeyRange = updatedMetadata.get(serverRingPosition);
 
@@ -900,6 +902,8 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public void close() {
+
+	this.replicationTimer.cancel();
 
         this.online = false;
 
