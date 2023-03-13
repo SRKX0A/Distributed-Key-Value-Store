@@ -61,9 +61,6 @@ public class ECSClientConnection extends Thread {
 		    continue;
 		}
 
-		this.serverAddress = request.getAddress();
-		this.serverPort = request.getPort();
-
 		synchronized (ECSClientConnection.class) {
 
 		    if (request.getStatus() == StatusType.INIT_REQ) {
@@ -104,8 +101,11 @@ public class ECSClientConnection extends Thread {
 
 	synchronized(ECS.class) {
 
-	    String address = request.getAddress();
-	    int port = request.getPort();
+	    this.serverAddress = request.getAddress();
+	    this.serverPort = request.getPort();
+
+	    String address = serverAddress;
+	    int port = serverPort;
 
 	    KeyRange serverKeyRange = this.ecs.addNode(address, port);
 	    this.ecs.getConnections().put(serverKeyRange.getRangeFrom(), this);
@@ -152,7 +152,7 @@ public class ECSClientConnection extends Thread {
 
 	    if (this.ecs.getNumNodes() == 0) {
 		try {
-		    this.sendMessage(StatusType.METADATA_LOCK, null, 0, null, null);
+		    this.sendMessage(StatusType.SHUTDOWN, null, 0, null, null);
 		} catch (Exception e) {
 		    logger.error("Failed to send write lock message to single terminating node: " + e.getMessage());
 		}
@@ -172,7 +172,7 @@ public class ECSClientConnection extends Thread {
 	    int successorPort = successorNodeRange.getPort();
 
 	    try {
-		this.sendMessage(StatusType.METADATA_LOCK, successorAddress, successorPort, updatedMetadata, serverRingPosition);
+		this.sendMessage(StatusType.SHUTDOWN, successorAddress, successorPort, updatedMetadata, serverRingPosition);
 	    } catch (Exception e) {
 		logger.error("Failed to send write lock message to terminating node: " + e.getMessage());
 		this.ecs.getConnections().remove(serverRingPosition);

@@ -15,6 +15,7 @@ public class ECSMessage implements Serializable {
 	REQ_FIN,
 	METADATA_LOCK,
 	METADATA_UPDATE,
+	SHUTDOWN,
 	INVALID_REQUEST_TYPE,
 	INVALID_MESSAGE_FORMAT,
     }

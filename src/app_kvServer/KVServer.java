@@ -167,7 +167,7 @@ public class KVServer extends Thread implements IKVServer {
 
         Arrays.sort(store_files, new Comparator<File>() {
             public int compare(File f1, File f2) {
-                return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
+                return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
             }
         });
 
@@ -753,7 +753,7 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    public void replicate() {
+    synchronized public void replicate() {
 
 	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
 	var serverKeyRange = this.metadata.get(serverRingPosition);
@@ -840,6 +840,12 @@ public class KVServer extends Thread implements IKVServer {
         File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("Replica1KVServerStoreFile_") || name.startsWith("Replica2KVServerStoreFile_");
+            }
+        });
+
+        Arrays.sort(replicatedFiles, new Comparator<File>() {
+            public int compare(File f1, File f2) {
+                return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
             }
         });
 

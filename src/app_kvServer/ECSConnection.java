@@ -9,6 +9,7 @@ import org.apache.log4j.Logger;
 
 import shared.KeyRange;
 import shared.messages.ECSMessage;
+import shared.messages.KVMessage;
 
 public class ECSConnection extends Thread {
 
@@ -20,7 +21,6 @@ public class ECSConnection extends Thread {
     private ObjectInputStream input;
     private ObjectOutputStream output;
 
-    private volatile boolean startedShutdown;
     private volatile boolean finishedShutdown;
 
     public ECSConnection(KVServer kvServer) throws Exception {
@@ -51,10 +51,10 @@ public class ECSConnection extends Thread {
 		    this.handleMetadataUpdate(msg);
 		} else if (msg.getStatus() == ECSMessage.StatusType.METADATA_LOCK) {
 		    this.handleMetadataLock(msg);
-		    if (this.startedShutdown) {
-			this.finishedShutdown = true;
-			return;
-		    }
+		} else if (msg.getStatus() == ECSMessage.StatusType.SHUTDOWN) {
+		    this.handleServerShutdown(msg);
+		    this.finishedShutdown = true;
+		    return;
 		}
 
 	    } catch (Exception e) {
@@ -118,20 +118,48 @@ public class ECSConnection extends Thread {
 
     }
 
+    public void handleServerShutdown(ECSMessage message) throws Exception {
+
+	String serverAddress = message.getAddress();
+	int serverPort = message.getPort();
+
+	if (serverAddress == null && serverPort == 0) {
+	    logger.debug("Got single termination message from ECS");
+	    return;
+	}
+
+	logger.debug("Got shutdown message from ECS");
+
+	this.kvServer.setServerState(KVServer.ServerState.SERVER_UNAVAILABLE);
+	
+	try {
+	    this.sendMessage(ECSMessage.StatusType.REQ_FIN, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
+	} catch (Exception e) {
+	    logger.error("Failed to send REQ_FIN messsage to ECS: " + e.getMessage());
+	}
+
+	Thread.sleep(100);
+
+	return;
+
+    }
+
     public void shutdown() {
 
-	this.kvServer.stopReplicationTimer();
-
 	try {
+	    this.kvServer.setServerState(KVServer.ServerState.SERVER_REBALANCING);
+	    this.kvServer.stopReplicationTimer();
+	    this.kvServer.replicate();
 	    this.sendMessage(ECSMessage.StatusType.TERM_REQ, this.kvServer.getHostname(), this.kvServer.getPort(), null, null);
 	} catch (Exception e) {
 	    logger.error("Failed to send TERM_REQ message to ECS: " + e.getMessage());
 	    return;
 	}
 
-	this.startedShutdown = true;
-
 	while (!this.finishedShutdown);
+
+	this.kvServer.clearOldReplicatedLogs(KVMessage.StatusType.REPLICATE_KV_1);
+	this.kvServer.clearOldReplicatedLogs(KVMessage.StatusType.REPLICATE_KV_2);
 
     }
 
