@@ -593,6 +593,7 @@ public class KVServer extends Thread implements IKVServer {
 	logger.info(String.format("Sending replicated logs to <%s,%d>", address, port));
 	
 	Socket serverSocket = new Socket(address, port);
+	InputStream input = serverSocket.getInputStream();
 	OutputStream output = serverSocket.getOutputStream();
 
         File storeDir = new File(this.directory);
@@ -603,27 +604,35 @@ public class KVServer extends Thread implements IKVServer {
             }
         });
 
-	for (File file: storeFiles) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String key = scanner.next();
-                String value = scanner.next();
-
-		ProtocolMessage message = new ProtocolMessage(status, key, value);
-
-		logger.info(String.format("Replicating key = %s, value = %s", key, value));
-
-		output.write(message.getBytes());
-		output.flush();
-
-	    }
-	    scanner.close();
-	}
-
-	ProtocolMessage finishMessage = new ProtocolMessage(StatusType.REPLICATE_KV_FIN, null, null);
-	output.write(finishMessage.getBytes());
+	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE, this.getKeyRangeSuccessString(), null);
+	output.write(initialMessage.getBytes());
 	output.flush();
+
+	ProtocolMessage reply = Connection.receiveMessage(input);
+
+	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
+	    for (File file: storeFiles) {
+		Scanner scanner = new Scanner(file);
+		scanner.useDelimiter("\r\n");
+		while (scanner.hasNext()) {
+		    String key = scanner.next();
+		    String value = scanner.next();
+
+		    ProtocolMessage message = new ProtocolMessage(status, key, value);
+
+		    logger.info(String.format("Replicating key = %s, value = %s", key, value));
+
+		    output.write(message.getBytes());
+		    output.flush();
+
+		}
+		scanner.close();
+	    }
+
+	    ProtocolMessage finishMessage = new ProtocolMessage(StatusType.REPLICATE_KV_FIN, null, null);
+	    output.write(finishMessage.getBytes());
+	    output.flush();
+	}
 	
 	serverSocket.close();
 
@@ -631,23 +640,42 @@ public class KVServer extends Thread implements IKVServer {
 
     public void receiveReplicatedLogsFromServer(InputStream input, OutputStream output, ProtocolMessage initialMessage) throws Exception {
 
-	logger.info("Receiving " + initialMessage.getStatus().toString() + " messages from server");
+	String currentTopology = this.getKeyRangeSuccessString();
+	String senderTopology = initialMessage.getKey();
 
-	String replicaPrefix = null;
-
-	if (initialMessage.getStatus() == StatusType.REPLICATE_KV_1) {
-	    replicaPrefix = "Replica1";
-	} else if (initialMessage.getStatus() == StatusType.REPLICATE_KV_2) {
-	    replicaPrefix = "Replica2";
+	if (this.getServerState() != KVServer.ServerState.SERVER_INITIALIZING && !currentTopology.equals(senderTopology)) {
+	    logger.warn("Replication request denied due to differing topology");
+	    ProtocolMessage finishMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE_NACK, null, null);
+	    output.write(finishMessage.getBytes());
+	    output.flush();
+	    return;
+	} else {
+	    ProtocolMessage startMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE_ACK, null, null);
+	    output.write(startMessage.getBytes());
+	    output.flush();
 	}
 
+	ProtocolMessage message = Connection.receiveMessage(input);	
+
+	if (message.getStatus() == StatusType.REPLICATE_KV_FIN) {
+	    return;
+	}
+
+	logger.info("Receiving " + message.getStatus().toString() + " messages from server");
+
+	String replicaPrefix = null;
+	StatusType replicaType = message.getStatus();
+
+	if (message.getStatus() == StatusType.REPLICATE_KV_1) {
+	    replicaPrefix = "Replica1";
+	} else if (message.getStatus() == StatusType.REPLICATE_KV_2) {
+	    replicaPrefix = "Replica2";
+	}
 
 	File replicatedFile = new File(this.directory, "New" + replicaPrefix + "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
 	replicatedFile.createNewFile();
 	BufferedWriter replicatedWriter = new BufferedWriter(new FileWriter(replicatedFile, true));
 	int keyCount = 0;
-
-	ProtocolMessage message = initialMessage;
 
 	while (true) {
 
@@ -678,7 +706,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	}
 
-	this.clearOldReplicatedLogs(initialMessage.getStatus());
+	this.clearOldReplicatedLogs(replicaType);
 
 
     }

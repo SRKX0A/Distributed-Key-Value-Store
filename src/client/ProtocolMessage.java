@@ -47,6 +47,12 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = KVMessage.StatusType.SEND_KV;
 	} else if (status.toLowerCase().equals("send_kv_fin")) {
 	    protocolStatus = KVMessage.StatusType.SEND_KV_FIN;
+	} else if (status.toLowerCase().equals("replicate_kv_handshake")) {
+	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE;
+	} else if (status.toLowerCase().equals("replicate_kv_handshake_ack")) {
+	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE_ACK;
+	} else if (status.toLowerCase().equals("replicate_kv_handshake_nack")) {
+	    protocolStatus = StatusType.REPLICATE_KV_HANDSHAKE_NACK;
 	} else if (status.toLowerCase().equals("replicate_kv_1")) {
 	    protocolStatus = KVMessage.StatusType.REPLICATE_KV_1;
 	} else if (status.toLowerCase().equals("replicate_kv_2")) {
@@ -96,7 +102,17 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
-	} 
+	} else if (protocolStatus == KVMessage.StatusType.REPLICATE_KV_HANDSHAKE) {
+
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (!key.endsWith("\r\n")) {
+		throw new IllegalArgumentException("Error: Malformed message");
+	    }
+
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
+	}
 
 	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
 
@@ -211,7 +227,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String msgString = null;
 
-	if (this.status == StatusType.KEYRANGE_SUCCESS) {
+	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.REPLICATE_KV_HANDSHAKE) {
 	    msgString = this.status.toString() + " " + this.key + "\r\n";     
 	} else if (this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
 	    msgString = this.status.toString() + "\r\n";
