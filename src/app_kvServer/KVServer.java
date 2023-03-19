@@ -206,21 +206,21 @@ public class KVServer extends Thread implements IKVServer {
             return this.memtable.get(key);
         }
 
-        File store_dir = new File(this.directory);
+        File storeDir = new File(this.directory);
 
-        File[] store_files = store_dir.listFiles(new FilenameFilter() {
+        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String name) {
                 return name.startsWith("KVServerStoreFile_");
             }
         });
 
-        Arrays.sort(store_files, new Comparator<File>() {
+        Arrays.sort(storeFiles, new Comparator<File>() {
             public int compare(File f1, File f2) {
                 return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
             }
         });
 
-        for (File file: store_files) {
+        for (File file: storeFiles) {
             Scanner scanner = new Scanner(file);
             scanner.useDelimiter("\r\n");
             while (scanner.hasNext()) {
@@ -244,6 +244,48 @@ public class KVServer extends Thread implements IKVServer {
 			}
 		    }
 
+                    scanner.close();
+                    return test_value;
+                }
+            }
+            scanner.close();
+        }
+
+        File[] replica1Files = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("Replica1KVServerStoreFile_");
+            }
+        });
+
+        for (File file: replica1Files) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String test_key = scanner.next();
+                String test_value = scanner.next();
+                if (key.equals(test_key)) {
+                    logger.info("Got key = " + key + " from replica 1 storage with value = " + test_value);
+                    scanner.close();
+                    return test_value;
+                }
+            }
+            scanner.close();
+        }
+
+        File[] replica2Files = storeDir.listFiles(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return name.startsWith("Replica2KVServerStoreFile_");
+            }
+        });
+
+        for (File file: replica2Files) {
+            Scanner scanner = new Scanner(file);
+            scanner.useDelimiter("\r\n");
+            while (scanner.hasNext()) {
+                String test_key = scanner.next();
+                String test_value = scanner.next();
+                if (key.equals(test_key)) {
+                    logger.info("Got key = " + key + " from replica 2 storage with value = " + test_value);
                     scanner.close();
                     return test_value;
                 }

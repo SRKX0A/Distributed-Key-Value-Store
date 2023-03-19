@@ -3,6 +3,7 @@ package app_kvServer;
 import java.io.*;
 import java.net.*;
 import java.security.*;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
@@ -108,9 +109,7 @@ public class Connection extends Thread {
     public void handleGetRequest(KVMessage request) throws Exception {
 	try {
 
-	    KeyRange serverKeyRange = this.kvServer.getMetadata().get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
-
-	    if (!serverKeyRange.withinKeyRange(this.hashKey(request.getKey()))) {
+	    if (!this.isServerResponsibleForGetKey(request.getKey())) {
 		sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, null, null);
 		return;
 	    }
@@ -257,6 +256,32 @@ public class Connection extends Thread {
 	} catch (Exception e) {
 	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
 	}
+    }
+
+    private boolean isServerResponsibleForGetKey(String key) {
+
+	var metadata = this.kvServer.getMetadata();
+
+	KeyRange serverKeyRange = metadata.get(this.hashIP(this.kvServer.getHostname(), this.kvServer.getPort()));
+
+	var firstPredecessorEntry = metadata.lowerEntry(serverKeyRange.getRangeFrom());
+
+	if (firstPredecessorEntry == null) {
+	    firstPredecessorEntry = metadata.lastEntry();
+	}
+
+	var secondPredecessorEntry = metadata.lowerEntry(firstPredecessorEntry.getKey());
+
+	if (secondPredecessorEntry == null) {
+	    secondPredecessorEntry = metadata.lastEntry();
+	}
+
+	byte[] requestKeyHash = this.hashKey(key);
+
+	return serverKeyRange.withinKeyRange(requestKeyHash) ||
+		firstPredecessorEntry.getValue().withinKeyRange(requestKeyHash) ||
+		secondPredecessorEntry.getValue().withinKeyRange(requestKeyHash);
+
     }
 
 }
