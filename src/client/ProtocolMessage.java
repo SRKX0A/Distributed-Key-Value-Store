@@ -29,6 +29,8 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	if (msgString.equals("keyrange\r\n")) {
 	    return new ProtocolMessage(StatusType.KEYRANGE, null, null);
+	} else if (msgString.equals("keyrange_read\r\n")) {
+	    return new ProtocolMessage(StatusType.KEYRANGE_READ, null, null);
 	}
 
 	int indexOfFirstSpace = msgString.indexOf(" ");
@@ -178,6 +180,8 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = StatusType.FAILED;
 	} else if (status.toLowerCase().equals("keyrange_success")) {
 	    protocolStatus = StatusType.KEYRANGE_SUCCESS;
+	} else if (status.toLowerCase().equals("keyrange_read_success")) {
+	    protocolStatus = StatusType.KEYRANGE_READ_SUCCESS;
 	} else if (status.toLowerCase().equals("server_not_responsible")) {
 	    protocolStatus = StatusType.SERVER_NOT_RESPONSIBLE;
 	} else {
@@ -217,7 +221,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
-	} else if (protocolStatus == StatusType.KEYRANGE_SUCCESS) {
+	} else if (protocolStatus == StatusType.KEYRANGE_SUCCESS || protocolStatus == StatusType.KEYRANGE_READ_SUCCESS) {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);
 
@@ -258,7 +262,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	String msgString = null;
 
-	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.REPLICATE_KV_HANDSHAKE) {
+	if (this.status == StatusType.KEYRANGE_SUCCESS || this.status == StatusType.KEYRANGE_READ_SUCCESS || this.status == StatusType.REPLICATE_KV_HANDSHAKE) {
 	    msgString = this.status.toString() + " " + this.key + "\r\n";     
 	} else if (this.status == StatusType.SERVER_NOT_RESPONSIBLE) {
 	    msgString = this.status.toString() + "\r\n";

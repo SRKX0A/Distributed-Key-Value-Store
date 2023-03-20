@@ -61,6 +61,8 @@ public class Connection extends Thread {
 		    this.handleGetRequest(request); 
 		} else if (request.getStatus() == StatusType.KEYRANGE) {
 		    this.handleKeyrangeRequest(request);
+		} else if (request.getStatus() == StatusType.KEYRANGE_READ) {
+		    this.handleKeyrangereadRequest(request);
 		} else if (request.getStatus() == StatusType.SERVER_INIT) {
 		    this.handleSendKVRequest(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
@@ -145,6 +147,15 @@ public class Connection extends Thread {
 	    sendMessage(this.output, StatusType.KEYRANGE_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
 	} catch (Exception e) {
 	    logger.error("Failure to handle KEYRANGE request: " + e.toString());
+	    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
+	}
+    }
+
+    public void handleKeyrangereadRequest(KVMessage request) throws Exception {
+	try {
+	    sendMessage(this.output, StatusType.KEYRANGE_READ_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
+	} catch (Exception e) {
+	    logger.error("Failure to handle KEYRANGE_READ request: " + e.toString());
 	    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 	}
     }
