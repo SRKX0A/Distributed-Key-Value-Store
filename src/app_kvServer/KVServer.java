@@ -1156,6 +1156,53 @@ public class KVServer extends Thread implements IKVServer {
 	return sb.toString();
     }
 
+    public String getKeyRangeReadSuccessString() {
+	StringBuilder sb = new StringBuilder();
+
+	KeyRange primaryKeyRange = this.metadata.get(this.hashIP(this.getHostname(), this.getPort()));
+
+	var firstReplicaEntry = this.metadata.higherEntry(primaryKeyRange.getRangeFrom());
+
+	if (firstReplicaEntry == null) {
+	    firstReplicaEntry = this.metadata.firstEntry();
+	}
+
+	var secondReplicaEntry = this.metadata.higherEntry(firstReplicaEntry.getKey());
+
+	if (secondReplicaEntry == null) {
+	    secondReplicaEntry = this.metadata.firstEntry();
+	}
+
+	var entries = new ArrayList<KeyRange>();
+	entries.add(primaryKeyRange);
+
+	if (!Arrays.equals(primaryKeyRange.getRangeFrom(), firstReplicaEntry.getKey())) {
+	    entries.add(firstReplicaEntry.getValue());
+	}
+
+	if (!Arrays.equals(primaryKeyRange.getRangeFrom(), secondReplicaEntry.getKey())) {
+	    entries.add(secondReplicaEntry.getValue());
+	}
+
+	for (var entry: entries) {
+	    for (var b: entry.getRangeTo()) {
+		sb.append(String.format("%02x", b));
+	    }
+	    sb.append(",");
+	    for (var b: entry.getRangeFrom()) {
+		sb.append(String.format("%02x", b));
+	    }
+	    sb.append(",");
+	    sb.append(entry.getAddress());
+	    sb.append(":");
+	    sb.append(Integer.toString(entry.getPort()));
+	    sb.append(";");
+	}
+	
+	return sb.toString();
+
+    }
+
     @Override
     public void run() {
 

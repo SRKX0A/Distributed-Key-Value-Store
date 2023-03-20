@@ -153,7 +153,7 @@ public class Connection extends Thread {
 
     public void handleKeyrangereadRequest(KVMessage request) throws Exception {
 	try {
-	    sendMessage(this.output, StatusType.KEYRANGE_READ_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
+	    sendMessage(this.output, StatusType.KEYRANGE_READ_SUCCESS, this.kvServer.getKeyRangeReadSuccessString(), null);
 	} catch (Exception e) {
 	    logger.error("Failure to handle KEYRANGE_READ request: " + e.toString());
 	    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
