@@ -1159,43 +1159,43 @@ public class KVServer extends Thread implements IKVServer {
     public String getKeyRangeReadSuccessString() {
 	StringBuilder sb = new StringBuilder();
 
-	KeyRange primaryKeyRange = this.metadata.get(this.hashIP(this.getHostname(), this.getPort()));
+	for (var entry: this.metadata.entrySet()) {
+	    KeyRange primaryKeyRange = entry.getValue();
 
-	var firstReplicaEntry = this.metadata.higherEntry(primaryKeyRange.getRangeFrom());
+	    var firstReplicaEntry = this.metadata.higherEntry(primaryKeyRange.getRangeFrom());
 
-	if (firstReplicaEntry == null) {
-	    firstReplicaEntry = this.metadata.firstEntry();
-	}
+	    if (firstReplicaEntry == null) {
+		firstReplicaEntry = this.metadata.firstEntry();
+	    }
 
-	var secondReplicaEntry = this.metadata.higherEntry(firstReplicaEntry.getKey());
+	    var secondReplicaEntry = this.metadata.higherEntry(firstReplicaEntry.getKey());
 
-	if (secondReplicaEntry == null) {
-	    secondReplicaEntry = this.metadata.firstEntry();
-	}
+	    if (secondReplicaEntry == null) {
+		secondReplicaEntry = this.metadata.firstEntry();
+	    }
 
-	var entries = new ArrayList<KeyRange>();
-	entries.add(primaryKeyRange);
+	    byte[] fromPosition = primaryKeyRange.getRangeTo();
+	    byte[] toPosition = null;
 
-	if (!Arrays.equals(primaryKeyRange.getRangeFrom(), firstReplicaEntry.getKey())) {
-	    entries.add(firstReplicaEntry.getValue());
-	}
+	    if (Arrays.equals(primaryKeyRange.getRangeFrom(), firstReplicaEntry.getValue().getRangeFrom())) {
+		toPosition = primaryKeyRange.getRangeFrom();
+	    } else if (Arrays.equals(primaryKeyRange.getRangeFrom(), secondReplicaEntry.getValue().getRangeFrom())) {
+		toPosition = firstReplicaEntry.getValue().getRangeFrom();
+	    } else {
+		toPosition = secondReplicaEntry.getValue().getRangeFrom();
+	    }
 
-	if (!Arrays.equals(primaryKeyRange.getRangeFrom(), secondReplicaEntry.getKey())) {
-	    entries.add(secondReplicaEntry.getValue());
-	}
-
-	for (var entry: entries) {
-	    for (var b: entry.getRangeTo()) {
+	    for (var b: fromPosition) {
 		sb.append(String.format("%02x", b));
 	    }
 	    sb.append(",");
-	    for (var b: entry.getRangeFrom()) {
+	    for (var b: toPosition) {
 		sb.append(String.format("%02x", b));
 	    }
 	    sb.append(",");
-	    sb.append(entry.getAddress());
+	    sb.append(primaryKeyRange.getAddress());
 	    sb.append(":");
-	    sb.append(Integer.toString(entry.getPort()));
+	    sb.append(Integer.toString(primaryKeyRange.getPort()));
 	    sb.append(";");
 	}
 	
