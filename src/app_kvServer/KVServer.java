@@ -1058,7 +1058,7 @@ public class KVServer extends Thread implements IKVServer {
 
     public void startReplicationTimer() {
 	KVServerReplicationTask replicationTask = new KVServerReplicationTask(this);
-	this.replicationTimer.schedule(replicationTask, 1000L, 15000L);
+	this.replicationTimer.schedule(replicationTask, 1000L, 500L);
     }
 
     public void stopReplicationTimer() {
