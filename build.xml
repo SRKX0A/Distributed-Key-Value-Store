@@ -12,17 +12,17 @@
   <property name="store.dir"     value="data"/>	
 
   <!-- Configuration for client application -->
-  <property name="clientjar.file"      value="m2-client.jar"/>
+  <property name="clientjar.file"      value="m3-client.jar"/>
   <property name="clientmanifest.file" value="CLIENT_MANIFEST.MF"/>
   <property name="clientmain.class" value="app_kvClient.App_KVClient"/>
 
   <!-- Configuration for server application -->
-  <property name="serverjar.file"      value="m2-server.jar"/>
+  <property name="serverjar.file"      value="m3-server.jar"/>
   <property name="servermanifest.file" value="SERVER_MANIFEST.MF"/>
   <property name="servermain.class" value="app_kvServer.App_KVServer"/>
 
   <!-- Configuration for ecs application -->
-  <property name="ecsjar.file"      value="m2-ecs.jar"/>
+  <property name="ecsjar.file"      value="m3-ecs.jar"/>
   <property name="ecsmanifest.file" value="ECS_MANIFEST.MF"/>
   <property name="ecsmain.class" value="app_kvECS.App_KVECS"/>
 
