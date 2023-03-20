@@ -1162,27 +1162,27 @@ public class KVServer extends Thread implements IKVServer {
 	for (var entry: this.metadata.entrySet()) {
 	    KeyRange primaryKeyRange = entry.getValue();
 
-	    var firstReplicaEntry = this.metadata.higherEntry(primaryKeyRange.getRangeFrom());
+	    var firstReplicaEntry = this.metadata.lowerEntry(primaryKeyRange.getRangeFrom());
 
 	    if (firstReplicaEntry == null) {
-		firstReplicaEntry = this.metadata.firstEntry();
+		firstReplicaEntry = this.metadata.lastEntry();
 	    }
 
-	    var secondReplicaEntry = this.metadata.higherEntry(firstReplicaEntry.getKey());
+	    var secondReplicaEntry = this.metadata.lowerEntry(firstReplicaEntry.getKey());
 
 	    if (secondReplicaEntry == null) {
-		secondReplicaEntry = this.metadata.firstEntry();
+		secondReplicaEntry = this.metadata.lastEntry();
 	    }
 
-	    byte[] fromPosition = primaryKeyRange.getRangeTo();
-	    byte[] toPosition = null;
+	    byte[] toPosition = primaryKeyRange.getRangeFrom();
+	    byte[] fromPosition = null;
 
 	    if (Arrays.equals(primaryKeyRange.getRangeFrom(), firstReplicaEntry.getValue().getRangeFrom())) {
-		toPosition = primaryKeyRange.getRangeFrom();
+		fromPosition = primaryKeyRange.getRangeTo();
 	    } else if (Arrays.equals(primaryKeyRange.getRangeFrom(), secondReplicaEntry.getValue().getRangeFrom())) {
-		toPosition = firstReplicaEntry.getValue().getRangeFrom();
+		fromPosition = firstReplicaEntry.getValue().getRangeTo();
 	    } else {
-		toPosition = secondReplicaEntry.getValue().getRangeFrom();
+		fromPosition = secondReplicaEntry.getValue().getRangeTo();
 	    }
 
 	    for (var b: fromPosition) {
