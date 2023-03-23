@@ -9,7 +9,7 @@ import shared.messages.ServerMessage;
 import shared.messages.ServerMessage.StatusType;
 
 public class ServerConnection extends Thread {
-    
+
     private static Logger logger = Logger.getRootLogger();
 
     private KVServer kvServer;
@@ -42,6 +42,7 @@ public class ServerConnection extends Thread {
 		    this.handleReplicateRequestMessage(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_1_FIN || request.getStatus() == StatusType.REPLICATE_KV_2_FIN) {
 		    this.handleReplicateKVFinMessage(request);
+		    return;
 		} else if (request.getStatus() == StatusType.SERVER_INIT_FIN) {
 		    this.handleServerInitFinMessage();
 		    return;
@@ -49,8 +50,12 @@ public class ServerConnection extends Thread {
 
 	    }
 
-	} catch (Exception e) {
-
+	} catch (EOFException eofe) {
+	    this.handleEOFException(eofe);
+	    return;
+	} catch(Exception e) {
+	    this.handleGeneralException(e);
+	    return;
 	}
 
     }
@@ -63,9 +68,9 @@ public class ServerConnection extends Thread {
 
 	String prefix = null;
 	if (request.getStatus() == StatusType.SEND_REPLICA_KV_1) {
-	    prefix = "Replica1KVServerStoreFile_"; 
+	    prefix = "Replica1KVServerStoreFile_";
 	} else {
-	    prefix = "Replica2KVServerStoreFile_"; 
+	    prefix = "Replica2KVServerStoreFile_";
 	}
 
 	this.kvServer.getServerFileManager().writeFileFromFileContents(prefix, request.getFileContents());	
@@ -93,6 +98,22 @@ public class ServerConnection extends Thread {
 	this.kvServer.getECSConnection().initializationFinished();
     }
 
+    public void handleEOFException(EOFException eofe) {
+	logger.info("Client connection closed: " + eofe.toString());
+    }
+
+    public void handleGeneralException(Exception e) {
+	logger.info("Client connection failure: " + e.toString());
+
+	try {
+	    this.output.close();
+	    this.input.close();
+	    this.socket.close();
+	} catch (IOException ioe) {
+	    logger.error("Failed to gracefully close connection: " + ioe.toString());
+	}
+    }
+
     public static void sendMessage(ObjectOutputStream output, StatusType status, byte[][] fileContents) throws Exception {
 
 	ServerMessage response = new ServerMessage(status, fileContents);
@@ -100,7 +121,7 @@ public class ServerConnection extends Thread {
 	output.writeObject(response);
 	output.flush();
 
-	logger.debug(String.format("Server sent request to Server with status = %s\n", response.getStatus()));
+	logger.debug(String.format("Server sent response to server with status = %s", response.getStatus()));
 
 	return;
 
@@ -109,6 +130,8 @@ public class ServerConnection extends Thread {
     public static ServerMessage receiveMessage(ObjectInputStream input) throws Exception {
 
 	ServerMessage request = (ServerMessage) input.readObject();
+
+	logger.debug(String.format("Server received request from server with status = %s", request.getStatus()));
 
 	return request;
     }
