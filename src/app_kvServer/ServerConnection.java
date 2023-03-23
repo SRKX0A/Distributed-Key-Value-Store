@@ -2,7 +2,6 @@ package app_kvServer;
 
 import java.io.*;
 import java.net.*;
-import java.time.*;
 
 import org.apache.log4j.Logger;
 
@@ -57,60 +56,37 @@ public class ServerConnection extends Thread {
     }
 
     public void handleSendKVMessage(ServerMessage request) {
-
-	File newKVFile = new File(this.kvServer.getDirectory(), "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-	try (FileOutputStream fileOutput = new FileOutputStream(newKVFile, true)) {
-	    for (byte[] b: request.getFileContents()) {
-		fileOutput.write(b); 
-	    } 
-	} catch (Exception e) {
-	    logger.error("Failed to create new KVServerStoreFile: " + e.getMessage()); 
-	}
-
+	this.kvServer.getServerFileManager().writeFileFromFileContents("KVServerStoreFile_", request.getFileContents());	
     }
 
     public void handleReplicaKVMessage(ServerMessage request) {
 
-	File newReplicaFile = null;
+	String prefix = null;
 	if (request.getStatus() == StatusType.SEND_REPLICA_KV_1) {
-	    newReplicaFile = new File(this.kvServer.getDirectory(), "Replica1KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	    prefix = "Replica1KVServerStoreFile_"; 
 	} else {
-	    newReplicaFile = new File(this.kvServer.getDirectory(), "Replica2KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	    prefix = "Replica2KVServerStoreFile_"; 
 	}
 
-	try (FileOutputStream fileOutput = new FileOutputStream(newReplicaFile, true)) {
-	    for (byte[] b: request.getFileContents()) {
-		fileOutput.write(b); 
-	    } 
-	} catch (Exception e) {
-	    logger.error("Failed to create new KVServerStoreFile: " + e.getMessage()); 
-	}
+	this.kvServer.getServerFileManager().writeFileFromFileContents(prefix, request.getFileContents());	
 
     }
 
     public void handleReplicateRequestMessage(ServerMessage request) {
 
-	File newReplicatedFile = null;
+	String prefix = null;
 	if (request.getStatus() == StatusType.REPLICATE_KV_1) {
-	    newReplicatedFile = new File(this.kvServer.getDirectory(), "NewReplica1KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	    prefix = "NewReplica1KVServerStoreFile_";
 	} else {
-	    newReplicatedFile = new File(this.kvServer.getDirectory(), "NewReplica2KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
+	    prefix = "NewReplica2KVServerStoreFile_";
 	}
 
-	try (FileOutputStream fileOutput = new FileOutputStream(newReplicatedFile, true)) {
-	    for (byte[] b: request.getFileContents()) {
-		fileOutput.write(b); 
-	    } 
-	} catch (Exception e) {
-	    logger.error("Failed to create new replicated KVServerStoreFile: " + e.getMessage()); 
-	}
-
-	return;
+	this.kvServer.getServerFileManager().writeFileFromFileContents(prefix, request.getFileContents());	
 
     }
 
     public void handleReplicateKVFinMessage(ServerMessage request) {
-	this.kvServer.clearOldReplicatedLogs(request.getStatus());
+	this.kvServer.getServerFileManager().clearOldReplicatedStoreFiles(request.getStatus());
     }
 
     public void handleServerInitFinMessage() {

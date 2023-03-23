@@ -4,9 +4,10 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.security.*;
-import java.time.*;
 
 import org.apache.log4j.Logger;
+
+import app_kvServer.util.ServerFileManager;
 
 import client.ProtocolMessage;
 import shared.KeyRange;
@@ -35,20 +36,19 @@ public class KVServer extends Thread implements IKVServer {
     private String ecsAddress;
     private int ecsPort;
 
-    private String directory;
-    private int cacheSize;
-    private int dumpCounter;
+    private ServerFileManager serverFileManager;
 
-    private volatile boolean online;
-
-    private File wal;
     private TreeMap<String, String> memtable;
     private Object memtableLock;
+    private int cacheSize;
+    private int dumpCounter;
 
     private volatile TreeMap<byte[], KeyRange> metadata;
 
     private Timer replicationTimer;
     private long replicationDelay;
+
+    private volatile boolean online;
 
     /**
     * Start KV Server at given port
@@ -60,38 +60,57 @@ public class KVServer extends Thread implements IKVServer {
     *           currently not contained in the cache. Options are "FIFO", "LRU",
     *           and "LFU".
     */
-    public KVServer(String address, int port, String bootstrapAddress, int bootstrapPort, String directory, int cacheSize, long replicationDelay) throws IOException {
+    public KVServer(String address, int port, String bootstrapAddress, int bootstrapPort, String directoryLocation, int cacheSize, long replicationDelay) throws IOException {
 
         this.state = ServerState.SERVER_INITIALIZING;
 
 	this.ecsAddress = bootstrapAddress;
 	this.ecsPort = bootstrapPort;
 
-        this.directory = directory;
+        this.memtable = new TreeMap<String, String>();
+        this.memtableLock = new Object();
         this.cacheSize = cacheSize;
 	this.dumpCounter = 0;
 
-        this.wal = new File(this.directory, "wal.txt");
-        this.memtable = new TreeMap<String, String>();
-        this.memtableLock = new Object();
+	this.serverFileManager = new ServerFileManager(directoryLocation, this.memtable, this.cacheSize);
 
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
 	this.replicationTimer = new Timer("Replication Timer");
-	this.replicationDelay = replicationDelay;	
-
-        Scanner scanner = new Scanner(this.wal);
-        scanner.useDelimiter("\r\n");
-        while (scanner.hasNext()) {
-            String test_key = scanner.next();
-            String test_value = scanner.next();
-            this.memtable.put(test_key, test_value);
-        }
-        scanner.close();
+	this.replicationDelay = replicationDelay;
 
 	logger.info("Starting server...");	
 	this.clientSocket = new ServerSocket(port, 0, InetAddress.getByName(address));
 	logger.info("Server listening on port: " + this.clientSocket.getLocalPort());
 
+    }
+
+    @Override
+    public void run() {
+
+	try {
+	    this.online = true;
+	    this.ecsConnection = new ECSConnection(this);
+	    this.ecsConnection.start();
+	} catch (Exception e) {
+	    logger.error("Could not connect to ECS server: " + e.getMessage());
+	    logger.info("Server stopped...");
+	    this.close();	
+	    return;
+	}
+
+        while (this.online) {
+            try {
+                Socket client = this.clientSocket.accept();
+                new Connection(client, this).start();
+                logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
+            } catch (SocketException e) {
+                logger.info(String.format("SocketException received: %s", e.toString()));
+            } catch (IOException e) {
+                logger.error(String.format("Unable to establish connection: %s", e.toString()));
+            }
+        }
+
+        logger.info("Server stopped...");
     }
 
     @Override
@@ -102,49 +121,6 @@ public class KVServer extends Thread implements IKVServer {
     @Override
     public String getHostname(){
         return this.clientSocket.getInetAddress().getHostName();
-    }
-
-    public ServerState getServerState() {
-        return this.state;
-    }
-
-    public void setServerState(ServerState state) {
-	this.state = state;
-    }
-
-    public TreeMap<byte[], KeyRange> getMetadata() {
-	return this.metadata;
-    }
-
-    public void setMetadata(TreeMap<byte[], KeyRange> metadata) {
-	this.metadata = metadata;
-    }
-
-    public void printMetadata() {
-	
-	System.out.println("METADATA BEGIN");
-	for (var entry: this.metadata.entrySet()) {
-	    var ringPosition = entry.getKey();
-	    var nodeRange = entry.getValue();
-
-	    System.out.print("Key: ");
-	    for (var b: ringPosition) {
-		System.out.print(String.format("%x", b));
-	    }
-	    System.out.print(String.format(", Addr+Port: <%s:%d>, RangeFrom: ", nodeRange.getAddress(), nodeRange.getPort()));
-
-	    for (var b: nodeRange.getRangeFrom()) {
-		System.out.print(String.format("%x", b));
-	    }
-	    System.out.print(", RangeTo: ");
-	    for (var b: nodeRange.getRangeTo()) {
-		System.out.print(String.format("%x", b));
-	    }
-	    System.out.println();
-
-	}
-	System.out.println("METADATA END");
-
     }
 
     @Override
@@ -159,42 +135,9 @@ public class KVServer extends Thread implements IKVServer {
 
     @Override
     public boolean inStorage(String key) throws Exception {
-
-        File store_dir = new File(this.directory);
-
-        File[] store_files = store_dir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
-
-        Arrays.sort(store_files, new Comparator<File>() {
-            public int compare(File f1, File f2) {
-                return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
-            }
-        });
-
-        for (File file: store_files) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-                if (key.equals(test_key)) {
-                    scanner.close();
-                    if (test_value.equals("null")) {
-                        return false;
-                    } else {
-                        return true;
-}
-                }
-            }
-            scanner.close();
-        }
-
-        return false;
-
-}
+	String result = this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
+	return !result.equals("null");
+    }
 
     @Override
     public boolean inCache(String key) {
@@ -209,92 +152,42 @@ public class KVServer extends Thread implements IKVServer {
             return this.memtable.get(key);
         }
 
-        File storeDir = new File(this.directory);
+	String value = this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
 
-        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from storage with value = " + value);
 
-        Arrays.sort(storeFiles, new Comparator<File>() {
-            public int compare(File f1, File f2) {
-                return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
-            }
-        });
-
-        for (File file: storeFiles) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-                if (key.equals(test_key)) {
-                    logger.info("Got key = " + key + " from storage with value = " + test_value);
-
-		    if (this.state != ServerState.SERVER_REBALANCING) {
-			synchronized (this.memtableLock) {
-			    this.memtable.put(test_key, test_value);
-			    if (this.memtable.size() >= this.cacheSize) {
-				this.dumpCounter++;
-				this.dumpCacheToDisk();
-				if (this.dumpCounter == 3) {
-				    this.compactLogs();
-				    this.clearOldLogs();
-				    this.dumpCounter = 0;
-				}
-			    }
+	    if (this.state != ServerState.SERVER_REBALANCING) {
+		synchronized (this.memtableLock) {
+		    this.memtable.put(key, value);
+		    if (this.memtable.size() >= this.cacheSize) {
+			this.dumpCounter++;
+			this.serverFileManager.dumpCacheToStoreFile();
+			if (this.dumpCounter == 3) {
+			    this.serverFileManager.compactStoreFiles();
+			    this.serverFileManager.clearOldStoreFiles();
+			    this.dumpCounter = 0;
 			}
 		    }
+		}
+	    }
 
-                    scanner.close();
-                    return test_value;
-                }
-            }
-            scanner.close();
-        }
+	    return value;
+	}
 
-        File[] replica1Files = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("Replica1KVServerStoreFile_");
-            }
-        });
+	value = this.serverFileManager.searchForKeyInFiles(key, "Replica1KVServerStoreFile_");
 
-        for (File file: replica1Files) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-                if (key.equals(test_key)) {
-                    logger.info("Got key = " + key + " from replica 1 storage with value = " + test_value);
-                    scanner.close();
-                    return test_value;
-                }
-            }
-            scanner.close();
-        }
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from replica 1 storage with value = " + value);
+	    return value;
+	}
 
-        File[] replica2Files = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("Replica2KVServerStoreFile_");
-            }
-        });
+	value = this.serverFileManager.searchForKeyInFiles(key, "Replica2KVServerStoreFile_");
 
-        for (File file: replica2Files) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-                if (key.equals(test_key)) {
-                    logger.info("Got key = " + key + " from replica 2 storage with value = " + test_value);
-                    scanner.close();
-                    return test_value;
-                }
-            }
-            scanner.close();
-        }
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from replica 1 storage with value = " + value);
+	    return value;
+	}
 
         return "null";
 
@@ -303,9 +196,7 @@ public class KVServer extends Thread implements IKVServer {
     @Override
     public synchronized StatusType putKV(String key, String value) throws Exception {
 
-        BufferedWriter walWriter = new BufferedWriter(new FileWriter(this.wal, true));
-        walWriter.write(String.format("%s\r\n%s\r\n", key, value));
-        walWriter.close();
+	this.serverFileManager.writeKVToWAL(key, value);
 
         StatusType response = StatusType.PUT_SUCCESS;
 
@@ -321,10 +212,10 @@ public class KVServer extends Thread implements IKVServer {
 
         if (this.memtable.size() >= this.cacheSize) {
 		this.dumpCounter++;
-		this.dumpCacheToDisk();
+		this.serverFileManager.dumpCacheToStoreFile();
 		if (this.dumpCounter == 3) {
-		    this.compactLogs();
-		    this.clearOldLogs();
+		    this.serverFileManager.compactStoreFiles();
+		    this.serverFileManager.clearOldStoreFiles();
 		    this.dumpCounter = 0;
 		}
             }
@@ -332,525 +223,6 @@ public class KVServer extends Thread implements IKVServer {
 
         return response;
 
-    }
-
-    public void dumpCacheToDisk() throws Exception {
-
-        logger.info("Dumping current cache contents to disk.");
-
-        String timestamp = Instant.now().toString();
-        File dumpedFile = new File(this.directory, "KVServerStoreFile_" + timestamp + ".txt"); 
-        dumpedFile.createNewFile();
-
-        BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-        for (Map.Entry<String, String> entry: this.memtable.entrySet()) {
-            dumpedWriter.write(String.format("%s\r\n%s\r\n", entry.getKey(), entry.getValue()));		
-        }
-
-        dumpedWriter.close();
-
-        new FileOutputStream(this.wal).close();
-
-        this.memtable.clear();
-    }
-
-    public void compactLogs() throws Exception {
-
-        logger.info("Compacting logs");
-
-        HashSet<String> keySet = new HashSet<String>();
-
-        File storeDir = new File(this.directory);
-
-        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
-
-        Arrays.sort(storeFiles, new Comparator<File>() {
-            public int compare(File f1, File f2) {
-                return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
-            }
-        });
-
-	File dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-	dumpedFile.createNewFile();
-	BufferedWriter dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-	int keyCount = 0;
-
-        for (File file: storeFiles) {
-
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-
-                if (!keySet.contains(test_key)) {
-                    keySet.add(test_key); 
-                    dumpedWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));
-		    keyCount++;
-
-		    if (keyCount >= this.cacheSize) {
-			dumpedWriter.close();
-			dumpedFile = new File(this.directory, "CompactedKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-			dumpedFile.createNewFile();
-			dumpedWriter = new BufferedWriter(new FileWriter(dumpedFile, true));
-			keyCount = 0;
-		    }
-
-                }
-            }
-            scanner.close();
-        }
-
-	dumpedWriter.close();
-
-        File[] compactedFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("CompactedKVServerStoreFile_");
-            }
-        });
-
-        for (File file: compactedFiles) {
-	    if (file.length() == 0) {
-		file.delete();
-	    }
-	}
-    }
-
-    public void clearOldLogs() {
-
-        logger.info("Clearing old logs");
-
-        File storeDir = new File(this.directory);
-
-        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
-
-        for (File file: storeFiles) {
-            file.delete();
-        }
-
-        File[] compacted_files = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("CompactedKVServerStoreFile_");
-            }
-        });
-
-        for (File file: compacted_files) {
-            String filename = file.getName();
-            File newFile = new File(this.directory, filename.substring(9));
-            file.renameTo(newFile);
-        }
-
-    }
-
-    public void partitionLogsByKeyRange() throws Exception {
-        
-	byte[] serverHash = this.hashIP(this.getHostname(), this.getPort());
-	KeyRange serverRange = this.metadata.get(serverHash);
-
-        File storeDir = new File(this.directory);
-
-        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
-
-        File filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-        filteredFile.createNewFile();
-        BufferedWriter filteredWriter = new BufferedWriter(new FileWriter(filteredFile, true));
-        int filteredKeyCount = 0;
-
-        File stayFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-        stayFile.createNewFile();
-        BufferedWriter stayWriter = new BufferedWriter(new FileWriter(stayFile, true));
-        int stayKeyCount = 0;
-
-        for (File file: storeFiles) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-
-                MessageDigest md = MessageDigest.getInstance("MD5");
-                md.update(test_key.getBytes());
-                byte[] keyDigest = md.digest();
-
-                if (serverRange == null || !serverRange.withinKeyRange(keyDigest)) {
-
-                    filteredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
-                    filteredKeyCount++;
-
-                    if (filteredKeyCount >= this.cacheSize) {
-                        filteredWriter.close();	
-                        filteredFile = new File(this.directory, "FilteredKVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-                        filteredFile.createNewFile();
-                        filteredWriter = new BufferedWriter(new FileWriter(filteredFile, true));
-                        filteredKeyCount = 0;
-                    }
-
-                } else {
-
-                    stayWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
-                    stayKeyCount++;
-
-                    if (stayKeyCount >= this.cacheSize) {
-                        stayWriter.close();	
-                        stayFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-                        stayFile.createNewFile();
-                        stayWriter = new BufferedWriter(new FileWriter(stayFile, true));
-                        stayKeyCount = 0;
-                    }
-		}
-            }
-	    file.delete();
-            scanner.close();
-        }
-	
-	filteredWriter.close();
-	stayWriter.close();
-
-        File[] partitionedFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_") || name.startsWith("FilteredKVServerStoreFile_");
-            }
-        });
-
-        for (File file: partitionedFiles) {
-	    if (file.length() == 0) {
-		file.delete();
-	    }
-	}
-
-    }
-
-    public void clearFilteredLogs() {
-
-        logger.info("Clearing filtered logs");
-
-        File storeDir = new File(this.directory);
-
-        File[] filteredFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("FilteredKVServerStoreFile_");
-            }
-        });
-
-        for (File file: filteredFiles) {
-            file.delete();
-        }
-
-    }
-
-    public byte[][] fileTofileContentsMatrix(File file) {
-	var fileContents = new ArrayList<byte[]>();
-	try (FileInputStream fileInput = new FileInputStream(file)) {
-
-	    var numMaxByteArrays = file.length() / 10000;
-
-	    for (int i = 0; i < numMaxByteArrays; i++) {
-		var b = fileInput.readNBytes(10000);
-		fileContents.add(b);
-	    }
-
-	    var leftoverByteArraySize = (int) file.length() % 10000;
-
-	    if (leftoverByteArraySize != 0) {
-		var b = fileInput.readNBytes(leftoverByteArraySize);
-		fileContents.add(b);
-	    }
-
-	} catch (Exception e) {
-
-	}
-
-	byte[][] fileContentsByteMatrix = new byte[fileContents.size()][];
-	for (int i = 0; i < fileContentsByteMatrix.length; i++) {
-	    fileContentsByteMatrix[i] = fileContents.get(i);
-	}
-
-	return fileContentsByteMatrix;
-	
-    }
-
-    public void sendAllLogsToServer(String address, int port) throws Exception {
-
-	logger.info(String.format("Sending logs to <%s,%d>", address, port));
-	
-	Socket serverSocket = new Socket(address, port);
-	OutputStream output = serverSocket.getOutputStream();
-
-	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.SERVER_INIT, null, null);
-	output.write(initialMessage.getBytes());
-	output.flush();
-
-
-        File storeDir = new File(this.directory);
-
-        File[] filteredFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("FilteredKVServerStoreFile_");
-            }
-        });
-
-	ObjectOutputStream oos = new ObjectOutputStream(output);
-
-	for (File file: filteredFiles) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_KV, this.fileTofileContentsMatrix(file));
-	}
-
-
-        File[] replica1Files = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("Replica1KVServerStoreFile_");
-            }
-        });
-
-	for (File file: replica1Files) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_1, this.fileTofileContentsMatrix(file));
-	}
-
-        File[] replica2Files = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("Replica2KVServerStoreFile_");
-            }
-        });
-
-	for (File file: replica2Files) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_2, this.fileTofileContentsMatrix(file));
-	}
-
-	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SERVER_INIT_FIN, null);
-
-	serverSocket.close();
-
-    }
-
-    public void sendReplicatedLogsToServer(ServerMessage.StatusType status, String address, int port) throws Exception {
-
-	logger.info(String.format("Sending replicated logs to <%s,%d>", address, port));
-	
-	Socket serverSocket = new Socket(address, port);
-	InputStream input = serverSocket.getInputStream();
-	OutputStream output = serverSocket.getOutputStream();
-
-	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE, this.getKeyRangeSuccessString(), null);
-	output.write(initialMessage.getBytes());
-	output.flush();
-
-        File storeDir = new File(this.directory);
-
-        File[] storeFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("KVServerStoreFile_");
-            }
-        });
-
-	ObjectOutputStream oos = new ObjectOutputStream(output);
-
-	ProtocolMessage reply = Connection.receiveMessage(input);
-
-	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
-	    for (File file: storeFiles) {
-		ServerConnection.sendMessage(oos, status, this.fileTofileContentsMatrix(file));
-	    }
-	}
-
-	if (status == ServerMessage.StatusType.REPLICATE_KV_1) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null);
-	} else {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null);
-	}
-	
-	serverSocket.close();
-
-    }
-
-    public void clearOldReplicatedLogs(ServerMessage.StatusType status) {
-
-	final String replicaPrefix;
-
-	File storeDir = new File(this.directory);
-
-	if (status == ServerMessage.StatusType.REPLICATE_KV_1_FIN) {
-	    logger.info("Clearing old Replica1 logs");
-	    replicaPrefix = "Replica1KVServerStoreFile_";
-	} else {
-	    logger.info("Clearing old Replica2 logs");
-	    replicaPrefix = "Replica2KVServerStoreFile_";
-	}
-
-	File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
-	    public boolean accept(File dir, String name) {
-		return name.startsWith(replicaPrefix);
-	    }
-	});
-
-	for (File file: replicatedFiles) {
-	    file.delete();
-	}
-
-	File[] newReplicatedFiles = storeDir.listFiles(new FilenameFilter() {
-	    public boolean accept(File dir, String name) {
-		return name.startsWith("New" + replicaPrefix);
-	    }
-	});
-
-	for (File file: newReplicatedFiles) {
-	    String filename = file.getName();
-	    File newFile = new File(this.directory, filename.substring(3));
-	    file.renameTo(newFile);
-	}
-
-	return;
-
-    }
-
-    public synchronized void replicate() {
-
-	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
-	var serverKeyRange = this.metadata.get(serverRingPosition);
-
-	var firstReplica = this.metadata.higherEntry(serverRingPosition);
-
-	if (firstReplica == null) {
-	    firstReplica = this.metadata.firstEntry();
-	}
-
-	var firstReplicaKeyRange = firstReplica.getValue();
-
-	if (serverKeyRange.equals(firstReplicaKeyRange)) {
-	    return;
-	}
-
-	try {
-	    this.dumpCacheToDisk();
-	    this.compactLogs();
-	    this.clearOldLogs();
-	    this.sendReplicatedLogsToServer(ServerMessage.StatusType.REPLICATE_KV_1, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
-	} catch (Exception e) {
-	    logger.warn("Failed to complete replication on first replica: " + e.getMessage());
-	}
-
-	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
-
-	if (secondReplica == null) {
-	    secondReplica = metadata.firstEntry();
-	}
-
-	var secondReplicaKeyRange = secondReplica.getValue();
-
-	if (serverKeyRange.equals(secondReplicaKeyRange)) {
-	    return;
-	}
-
-	try {
-	    this.dumpCacheToDisk();
-	    this.compactLogs();
-	    this.clearOldLogs();
-	    this.sendReplicatedLogsToServer(ServerMessage.StatusType.REPLICATE_KV_2, secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
-	} catch (Exception e) {
-	    logger.warn("Failed to complete replication on second replica: " + e.getMessage());
-	}
-
-    }
-
-    public void recoverIfNecessary(ECSMessage message) throws Exception {
-	
-	String address = message.getAddress();
-	int port = message.getPort();
-
-	byte[] serverRingPosition = message.getRingPosition();
-	byte[] targetRingPosition = this.hashIP(address, port);
-
-	var updatedMetadata = message.getMetadata();	
-
-	if (updatedMetadata.get(targetRingPosition) != null) {
-	    return;
-	}
-
-	var responsibleServerRingPosition = updatedMetadata.ceilingKey(targetRingPosition);
-
-	if (responsibleServerRingPosition == null) {
-	    responsibleServerRingPosition = updatedMetadata.firstKey();
-	}
-
-	if (!Arrays.equals(serverRingPosition, responsibleServerRingPosition)) {
-	    return;
-	}
-
-	logger.info(String.format("Recovering keys from node <%s:%d> shutdown", address, port));
-
-	KeyRange serverKeyRange = updatedMetadata.get(serverRingPosition);
-
-	File recoveredFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-	recoveredFile.createNewFile();
-	BufferedWriter recoveredWriter = new BufferedWriter(new FileWriter(recoveredFile, true));
-	int recoveredKeyCount = 0;
-
-        File storeDir = new File(this.directory);
-
-        File[] replicatedFiles = storeDir.listFiles(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return name.startsWith("Replica1KVServerStoreFile_") || name.startsWith("Replica2KVServerStoreFile_");
-            }
-        });
-
-        Arrays.sort(replicatedFiles, new Comparator<File>() {
-            public int compare(File f1, File f2) {
-                return Long.valueOf(f1.lastModified()).compareTo(f2.lastModified());
-            }
-        });
-
-	for (File file: replicatedFiles) {
-            Scanner scanner = new Scanner(file);
-            scanner.useDelimiter("\r\n");
-            while (scanner.hasNext()) {
-                String test_key = scanner.next();
-                String test_value = scanner.next();
-
-                MessageDigest md = MessageDigest.getInstance("MD5");
-                md.update(test_key.getBytes());
-                byte[] keyDigest = md.digest();
-
-                if (serverKeyRange.withinKeyRange(keyDigest)) {
-
-                    recoveredWriter.write(String.format("%s\r\n%s\r\n", test_key, test_value));		
-                    recoveredKeyCount++;
-
-                    if (recoveredKeyCount >= this.cacheSize) {
-                        recoveredWriter.close();	
-                        recoveredFile = new File(this.directory, "KVServerStoreFile_" + Instant.now().toString() + ".txt"); 
-                        recoveredFile.createNewFile();
-                        recoveredWriter = new BufferedWriter(new FileWriter(recoveredFile, true));
-                        recoveredKeyCount = 0;
-                    }
-
-                }
-            }
-            scanner.close();
-	}
-
-	recoveredWriter.close();
-
-    }
-
-    public void startReplicationTimer() {
-	KVServerReplicationTask replicationTask = new KVServerReplicationTask(this);
-	this.replicationTimer.schedule(replicationTask, 1000L, 10000L);
-    }
-
-    public void stopReplicationTimer() {
-	this.replicationTimer.cancel();
     }
 
     @Override
@@ -899,34 +271,163 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    public void sendShutdownMessage() {
-	if (this.ecsConnection != null) {
-	    this.ecsConnection.shutdown();
+    public void sendAllFilesToServer(String address, int port) throws Exception {
+
+	logger.info(String.format("Sending all files to <%s,%d>", address, port));
+	
+	this.serverFileManager.dumpCacheToStoreFile();
+	this.serverFileManager.compactStoreFiles();
+	this.serverFileManager.clearOldStoreFiles();
+
+	byte[] serverHash = this.hashIP(this.getHostname(), this.getPort());
+	KeyRange serverKeyRange = this.metadata.get(serverHash);
+
+	this.serverFileManager.partitionStoreFilesByKeyRange(serverHash, serverKeyRange);
+
+	Socket serverSocket = new Socket(address, port);
+	OutputStream output = serverSocket.getOutputStream();
+
+	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.SERVER_INIT, null, null);
+	output.write(initialMessage.getBytes());
+	output.flush();
+
+	File[] partitionedFiles = this.serverFileManager.filterFilesByPrefix("PartitionedKVServerStoreFile_");
+
+	ObjectOutputStream oos = new ObjectOutputStream(output);
+
+	for (File file: partitionedFiles) {
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_KV, this.serverFileManager.fileTofileContentsMatrix(file));
 	}
+
+	File[] replica1Files = this.serverFileManager.filterFilesByPrefix("Replica1KVServerStoreFile_");
+
+	for (File file: replica1Files) {
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_1, this.serverFileManager.fileTofileContentsMatrix(file));
+	}
+
+	File[] replica2Files = this.serverFileManager.filterFilesByPrefix("Replica2KVServerStoreFile_");
+
+	for (File file: replica2Files) {
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_2, this.serverFileManager.fileTofileContentsMatrix(file));
+	}
+
+	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SERVER_INIT_FIN, null);
+
+	serverSocket.close();
+
+	this.serverFileManager.clearPartitionedFiles();
+
     }
 
-    public boolean isOnline() {
-        return this.online;
+    public void sendFilesToReplicaServer(ServerMessage.StatusType status, String address, int port) throws Exception {
+
+	logger.info(String.format("Sending files to replica server <%s,%d>", address, port));
+	
+	Socket serverSocket = new Socket(address, port);
+	InputStream input = serverSocket.getInputStream();
+	OutputStream output = serverSocket.getOutputStream();
+
+	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE, this.getKeyRangeSuccessString(), null);
+	output.write(initialMessage.getBytes());
+	output.flush();
+
+	File[] storeFiles = this.serverFileManager.filterFilesByPrefix("KVServerStoreFile_");
+
+	ObjectOutputStream oos = new ObjectOutputStream(output);
+
+	ProtocolMessage reply = Connection.receiveMessage(input);
+
+	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
+	    for (File file: storeFiles) {
+		ServerConnection.sendMessage(oos, status, this.serverFileManager.fileTofileContentsMatrix(file));
+	    }
+	}
+
+	if (status == ServerMessage.StatusType.REPLICATE_KV_1) {
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null);
+	} else {
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null);
+	}
+	
+	serverSocket.close();
+
     }
 
-    public void setOnline(boolean online) {
-	this.online = online;
+    public synchronized void replicate() {
+
+	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
+	var serverKeyRange = this.metadata.get(serverRingPosition);
+
+	var firstReplica = this.metadata.higherEntry(serverRingPosition);
+
+	if (firstReplica == null) {
+	    firstReplica = this.metadata.firstEntry();
+	}
+
+	var firstReplicaKeyRange = firstReplica.getValue();
+
+	if (serverKeyRange.equals(firstReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.serverFileManager.dumpCacheToStoreFile();
+	    this.serverFileManager.compactStoreFiles();
+	    this.serverFileManager.clearOldStoreFiles();
+	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_1, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.warn("Failed to complete replication on first replica: " + e.getMessage());
+	}
+
+	var secondReplica = metadata.higherEntry(firstReplicaKeyRange.getRangeFrom());
+
+	if (secondReplica == null) {
+	    secondReplica = metadata.firstEntry();
+	}
+
+	var secondReplicaKeyRange = secondReplica.getValue();
+
+	if (serverKeyRange.equals(secondReplicaKeyRange)) {
+	    return;
+	}
+
+	try {
+	    this.serverFileManager.dumpCacheToStoreFile();
+	    this.serverFileManager.compactStoreFiles();
+	    this.serverFileManager.clearOldStoreFiles();
+	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_2, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
+	} catch (Exception e) {
+	    logger.warn("Failed to complete replication on second replica: " + e.getMessage());
+	}
+
     }
 
-    public String getECSAddress() {
-        return this.ecsAddress;
-    }
+    public void recoverIfNecessary(ECSMessage message) throws Exception {
+	
+	String address = message.getAddress();
+	int port = message.getPort();
 
-    public int getECSPort() {
-        return this.ecsPort;
-    }
+	byte[] serverRingPosition = message.getRingPosition();
+	byte[] targetRingPosition = this.hashIP(address, port);
 
-    public ECSConnection getECSConnection() {
-	return this.ecsConnection;
-    }
+	var updatedMetadata = message.getMetadata();	
 
-    public String getDirectory() {
-	return this.directory;
+	if (updatedMetadata.get(targetRingPosition) != null) {
+	    return;
+	}
+
+	var responsibleServerRingPosition = updatedMetadata.ceilingKey(targetRingPosition);
+
+	if (responsibleServerRingPosition == null) {
+	    responsibleServerRingPosition = updatedMetadata.firstKey();
+	}
+
+	if (!Arrays.equals(serverRingPosition, responsibleServerRingPosition)) {
+	    return;
+	}
+
+	this.serverFileManager.recover(address, port, updatedMetadata, serverRingPosition);
+
     }
 
     public String getKeyRangeSuccessString() {
@@ -999,33 +500,59 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    @Override
-    public void run() {
+    public void startReplicationTimer() {
+	KVServerReplicationTask replicationTask = new KVServerReplicationTask(this);
+	this.replicationTimer.schedule(replicationTask, 1000L, this.replicationDelay);
+    }
 
-	try {
-	    this.online = true;
-	    this.ecsConnection = new ECSConnection(this);
-	    this.ecsConnection.start();
-	} catch (Exception e) {
-	    logger.error("Could not connect to ECS server: " + e.getMessage());
-	    logger.info("Server stopped...");
-	    this.close();	
-	    return;
+    public void stopReplicationTimer() {
+	this.replicationTimer.cancel();
+    }
+
+    public void sendShutdownMessage() {
+	if (this.ecsConnection != null) {
+	    this.ecsConnection.shutdown();
 	}
+    }
 
-        while (this.online) {
-            try {
-                Socket client = this.clientSocket.accept();
-                new Connection(client, this).start();
-                logger.info(String.format("Connected to %s on port %d", client.getInetAddress().getHostName(), client.getPort()));
-            } catch (SocketException e) {
-                logger.info(String.format("SocketException received: %s", e.toString()));
-            } catch (IOException e) {
-                logger.error(String.format("Unable to establish connection: %s", e.toString()));
-            }
-        }
+    public ServerState getServerState() {
+        return this.state;
+    }
 
-        logger.info("Server stopped...");
+    public void setServerState(ServerState state) {
+	this.state = state;
+    }
+
+    public TreeMap<byte[], KeyRange> getMetadata() {
+	return this.metadata;
+    }
+
+    public void setMetadata(TreeMap<byte[], KeyRange> metadata) {
+	this.metadata = metadata;
+    }
+
+    public boolean isOnline() {
+        return this.online;
+    }
+
+    public void setOnline(boolean online) {
+	this.online = online;
+    }
+
+    public String getECSAddress() {
+        return this.ecsAddress;
+    }
+
+    public int getECSPort() {
+        return this.ecsPort;
+    }
+
+    public ECSConnection getECSConnection() {
+	return this.ecsConnection;
+    }
+
+    public ServerFileManager getServerFileManager() {
+	return this.serverFileManager;
     }
 
     private byte[] hashIP(String address, int port) {

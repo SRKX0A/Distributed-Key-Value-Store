@@ -92,13 +92,7 @@ public class ECSConnection extends Thread {
 	int serverPort = message.getPort();
 
 	this.kvServer.setServerState(KVServer.ServerState.SERVER_REBALANCING);
-
-	this.kvServer.dumpCacheToDisk();
-	this.kvServer.compactLogs();
-	this.kvServer.clearOldLogs();
-	this.kvServer.partitionLogsByKeyRange();
-	this.kvServer.sendAllLogsToServer(serverAddress, serverPort);
-	this.kvServer.clearFilteredLogs();
+	this.kvServer.sendAllFilesToServer(serverAddress, serverPort);
 
 	return;
 
@@ -155,8 +149,8 @@ public class ECSConnection extends Thread {
 
 	while (!this.finishedShutdown);
 
-	this.kvServer.clearOldReplicatedLogs(ServerMessage.StatusType.REPLICATE_KV_1_FIN);
-	this.kvServer.clearOldReplicatedLogs(ServerMessage.StatusType.REPLICATE_KV_2_FIN);
+	this.kvServer.getServerFileManager().clearOldReplicatedStoreFiles(ServerMessage.StatusType.REPLICATE_KV_1_FIN);
+	this.kvServer.getServerFileManager().clearOldReplicatedStoreFiles(ServerMessage.StatusType.REPLICATE_KV_2_FIN);
 
     }
 
