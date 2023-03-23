@@ -19,6 +19,7 @@ public class App_KVServer {
 	Option directoryOption = Option.builder("d").desc("directory for persistent files").hasArg().type(String.class).build();
 	Option logOption = Option.builder("l").desc("relative path of the logfile").hasArg().type(String.class).build();
 	Option logLevelOption = Option.builder("ll").desc("loglevel, e.g. INFO, WARN, DEBUG, etc.").hasArg().type(String.class).build();
+	Option replicationDelayOption = Option.builder("t").desc("replication delay in milliseconds").hasArg().type(String.class).build();
 	Option helpOption = Option.builder("h").desc("displays help message").build();
 	
 	Options options = new Options();	
@@ -30,6 +31,7 @@ public class App_KVServer {
 	options.addOption(directoryOption);
 	options.addOption(logOption);
 	options.addOption(logLevelOption);
+	options.addOption(replicationDelayOption);
 	options.addOption(helpOption);
 
 	CommandLineParser parser = new DefaultParser();
@@ -50,6 +52,7 @@ public class App_KVServer {
 	String directory = "./";
 	String logPath = "server.log";
 	Level logLevel = Level.ALL;
+	long replicationDelay = 500L;
 
 	try {
 	    String bootstrap = cmd.getOptionValue("b");  
@@ -75,6 +78,18 @@ public class App_KVServer {
 		}
 	    } catch (Exception e) {
 		System.err.println("Parsing failed. Reason: " + e.getMessage());
+		System.exit(1);
+	    }
+	}
+
+	if (cmd.hasOption("t")) {
+	    try {
+		replicationDelay = (long) Long.parseLong(cmd.getOptionValue("t"));
+		if (replicationDelay <= 0) {
+		    throw new IllegalArgumentException("Error: replication delay must be greater than 0"); 
+		}
+	    } catch (Exception e) {
+		System.err.println("Parsing failed. Reasion: " + e.getMessage());
 		System.exit(1);
 	    }
 	}
@@ -108,7 +123,7 @@ public class App_KVServer {
 	    File wal = new File(directory, "wal.txt");
 	    wal.createNewFile();
 
-	    KVServer kvServer = new KVServer(address, port, bootstrapAddress, bootstrapPort, directory, cacheSize);
+	    KVServer kvServer = new KVServer(address, port, bootstrapAddress, bootstrapPort, directory, cacheSize, replicationDelay);
 	    KVServerShutdownHook kvServerShutdownHook = new KVServerShutdownHook(kvServer);
 	    Runtime.getRuntime().addShutdownHook(kvServerShutdownHook);
 	    kvServer.start();
@@ -140,3 +155,4 @@ class KVServerShutdownHook extends Thread {
     }
 
 }
+

@@ -84,7 +84,7 @@ public class ECSTest extends TestCase {
 	assertNull(ex);
 
 	try {
-	    kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
+	    kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
 	    kvServer.start();
 
 	    try {
@@ -145,8 +145,8 @@ public class ECSTest extends TestCase {
 	assertNull(ex);
 
 	try {
-	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
-	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
+	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
+	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
 	} catch (Exception e) {
 	    ex = e;
 	}

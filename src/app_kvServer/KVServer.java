@@ -47,6 +47,7 @@ public class KVServer extends Thread implements IKVServer {
     private volatile TreeMap<byte[], KeyRange> metadata;
 
     private Timer replicationTimer;
+    private long replicationDelay;
 
     /**
     * Start KV Server at given port
@@ -58,7 +59,7 @@ public class KVServer extends Thread implements IKVServer {
     *           currently not contained in the cache. Options are "FIFO", "LRU",
     *           and "LFU".
     */
-    public KVServer(String address, int port, String bootstrapAddress, int bootstrapPort, String directory, int cacheSize) throws IOException {
+    public KVServer(String address, int port, String bootstrapAddress, int bootstrapPort, String directory, int cacheSize, long replicationDelay) throws IOException {
 
         this.state = ServerState.SERVER_INITIALIZING;
 
@@ -75,6 +76,7 @@ public class KVServer extends Thread implements IKVServer {
 
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
 	this.replicationTimer = new Timer("Replication Timer");
+	this.replicationDelay = replicationDelay;	
 
         Scanner scanner = new Scanner(this.wal);
         scanner.useDelimiter("\r\n");
@@ -1058,7 +1060,7 @@ public class KVServer extends Thread implements IKVServer {
 
     public void startReplicationTimer() {
 	KVServerReplicationTask replicationTask = new KVServerReplicationTask(this);
-	this.replicationTimer.schedule(replicationTask, 1000L, 500L);
+	this.replicationTimer.schedule(replicationTask, 1000L, this.replicationDelay);
     }
 
     public void stopReplicationTimer() {

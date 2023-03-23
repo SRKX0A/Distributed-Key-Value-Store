@@ -53,7 +53,7 @@ public class PerformanceTest extends TestCase {
         }
 
         try {
-            kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 10);
+            kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 10, 5000L);
             kvServer.start();
         } catch (Exception e) {
             e.printStackTrace();

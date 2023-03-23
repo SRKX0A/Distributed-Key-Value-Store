@@ -75,7 +75,7 @@ public class PerformanceTestM2 extends TestCase {
         }
 
         try {
-            kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data/0", cacheSize);
+            kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data/0", cacheSize, 5000L);
             kvServer.start();
             System.out.println("Starting Server with port:" + String.valueOf(kvServer.getPort())
                     + " and ECS server at port: " + String.valueOf(ecs.getPort()));
@@ -287,7 +287,7 @@ public class PerformanceTestM2 extends TestCase {
                 (new File(folderName)).mkdirs();
                 (new File(folderName + "/wal.txt")).createNewFile();
 
-                KVServer tempServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), folderName, cacheSize);
+                KVServer tempServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), folderName, cacheSize, 5000L);
                 servers.add(tempServer);
                 tempServer.start();
                 // System.out.println("Starting Server with port:" +

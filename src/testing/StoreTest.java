@@ -43,8 +43,8 @@ public class StoreTest extends TestCase {
 	}
 
 	try {
-	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
-	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3);
+	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
+	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
