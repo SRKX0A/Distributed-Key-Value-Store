@@ -9,7 +9,7 @@ import org.apache.log4j.Logger;
 
 import shared.KeyRange;
 import shared.messages.ECSMessage;
-import shared.messages.KVMessage;
+import shared.messages.ServerMessage;
 
 public class ECSConnection extends Thread {
 
@@ -155,8 +155,8 @@ public class ECSConnection extends Thread {
 
 	while (!this.finishedShutdown);
 
-	this.kvServer.clearOldReplicatedLogs(KVMessage.StatusType.REPLICATE_KV_1);
-	this.kvServer.clearOldReplicatedLogs(KVMessage.StatusType.REPLICATE_KV_2);
+	this.kvServer.clearOldReplicatedLogs(ServerMessage.StatusType.REPLICATE_KV_1_FIN);
+	this.kvServer.clearOldReplicatedLogs(ServerMessage.StatusType.REPLICATE_KV_2_FIN);
 
     }
 

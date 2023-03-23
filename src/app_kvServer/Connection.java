@@ -3,7 +3,6 @@ package app_kvServer;
 import java.io.*;
 import java.net.*;
 import java.security.*;
-import java.util.*;
 
 import org.apache.log4j.Logger;
 
@@ -64,9 +63,11 @@ public class Connection extends Thread {
 		} else if (request.getStatus() == StatusType.KEYRANGE_READ) {
 		    this.handleKeyrangereadRequest(request);
 		} else if (request.getStatus() == StatusType.SERVER_INIT) {
-		    this.handleSendKVRequest(request);
+		    this.handleServerInitMessage();
+		    return;
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
-		    this.handleReplicateKVRequest(request);
+		    this.handleReplicateKVHandshakeMessage(request);
+		    return;
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}
@@ -130,18 +131,6 @@ public class Connection extends Thread {
 	}
     }
 
-    public void handleSendKVRequest(KVMessage request) throws Exception {
-
-	this.kvServer.receiveAllLogsFromServer(this.input, this.output, (ProtocolMessage) request);
-
-    }
-
-    public void handleReplicateKVRequest(KVMessage request) throws Exception {
-
-	this.kvServer.receiveReplicatedLogsFromServer(this.input, this.output, (ProtocolMessage) request);
-
-    }
-
     public void handleKeyrangeRequest(KVMessage request) throws Exception {
 	try {
 	    sendMessage(this.output, StatusType.KEYRANGE_SUCCESS, this.kvServer.getKeyRangeSuccessString(), null);
@@ -159,6 +148,28 @@ public class Connection extends Thread {
 	    sendMessage(this.output, StatusType.SERVER_STOPPED, null, null);
 	}
     }
+
+    public void handleServerInitMessage() throws Exception {
+	new ServerConnection(this.socket, this.kvServer).start();
+    }
+
+    public void handleReplicateKVHandshakeMessage(KVMessage request) throws Exception {
+	
+	String currentTopology = this.kvServer.getKeyRangeSuccessString();
+	String senderTopology = request.getKey();
+
+	if (this.kvServer.getServerState() != KVServer.ServerState.SERVER_INITIALIZING && !currentTopology.equals(senderTopology)) {
+	    logger.warn("Replication request denied due to differing topology");
+	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_NACK, null, null);
+	} else {
+	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_ACK, null, null);
+	    new ServerConnection(this.socket, this.kvServer).start();
+	}
+
+	return;
+
+    }
+
 
     public void handleInvalidMessageRequestType() throws Exception {
 	logger.error("Client message format failure: Invalid request status.");
