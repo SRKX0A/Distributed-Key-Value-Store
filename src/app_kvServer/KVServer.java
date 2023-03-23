@@ -185,7 +185,7 @@ public class KVServer extends Thread implements IKVServer {
 	value = this.serverFileManager.searchForKeyInFiles(key, "Replica2KVServerStoreFile_");
 
 	if (!value.equals("null")) {
-	    logger.info("Got key = " + key + " from replica 1 storage with value = " + value);
+	    logger.info("Got key = " + key + " from replica 2 storage with value = " + value);
 	    return value;
 	}
 
@@ -395,7 +395,7 @@ public class KVServer extends Thread implements IKVServer {
 	    this.serverFileManager.dumpCacheToStoreFile();
 	    this.serverFileManager.compactStoreFiles();
 	    this.serverFileManager.clearOldStoreFiles();
-	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_2, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
+	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_2, secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
 	} catch (Exception e) {
 	    logger.warn("Failed to complete replication on second replica: " + e.getMessage());
 	}
