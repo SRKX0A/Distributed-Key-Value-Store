@@ -245,6 +245,8 @@ public class KVServer extends Thread implements IKVServer {
 
 	this.replicationTimer.cancel();
 
+        this.online = false;
+
         try {
 
 	    if (this.clientSocket != null) {
@@ -266,8 +268,6 @@ public class KVServer extends Thread implements IKVServer {
 	} catch (Exception e) {
 	    logger.error("Could not gracefully close ECS socket: " + e.getMessage());
 	}
-
-        this.online = false;
 
     }
 

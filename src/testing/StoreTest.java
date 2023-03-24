@@ -36,15 +36,18 @@ public class StoreTest extends TestCase {
 
 	try {
 	    (new File("src/testing/data")).mkdirs();
-	    (new File("src/testing/data/wal.txt")).createNewFile();
+	    (new File("src/testing/data/data1")).mkdirs();
+	    (new File("src/testing/data/data1/wal.txt")).createNewFile();
+	    (new File("src/testing/data/data2")).mkdirs();
+	    (new File("src/testing/data/data2/wal.txt")).createNewFile();
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
 	}
 
 	try {
-	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
-	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
+	    kvServer1 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data/data1", 3, 5000L);
+	    kvServer2 = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data/data2", 3, 5000L);
 	} catch (Exception e) {
 	    e.printStackTrace();
 	    return;
@@ -76,11 +79,21 @@ public class StoreTest extends TestCase {
 	kvServer1.close();
 	ecs.close();
 	
-	File[] testing_data = (new File("src/testing/data")).listFiles();
+	File data1 = new File("src/testing/data/data1");	
 
-	for (File f: testing_data) {
+	for (File f: data1.listFiles()) {
 	    f.delete();
 	}
+
+	data1.delete();
+
+	File data2 = new File("src/testing/data/data2");	
+
+	for (File f: data2.listFiles()) {
+	    f.delete();
+	}
+
+	data2.delete();
 
 	try {
 	    Thread.sleep(500);

@@ -27,9 +27,11 @@ public class AllTests {
 	//clientSuite.addTestSuite(ClientTest.class);
 	//clientSuite.addTestSuite(ServerTest.class);
 	//clientSuite.addTestSuite(PerformanceTest.class);
-	clientSuite.addTestSuite(KeyRangeTest.class);
-	clientSuite.addTestSuite(ECSTest.class);
-	clientSuite.addTestSuite(StoreTest.class);
+	//clientSuite.addTestSuite(KeyRangeTest.class);
+	//clientSuite.addTestSuite(ECSTest.class);
+	//clientSuite.addTestSuite(StoreTest.class);
+	//clientSuite.addTestSuite(PerformanceTestM2.class);
+	clientSuite.addTestSuite(KeyrangeReadTest.class);
 	return clientSuite;
     }
 	
