@@ -41,13 +41,6 @@ public class ServerTest extends TestCase {
 	}
 
 	try {
-	    Thread.sleep(500);
-	} catch (Exception e) {
-	    e.printStackTrace();
-	    return;
-	}
-
-	try {
 	    kvServer = new KVServer("localhost", 0, "localhost", ecs.getPort(), "src/testing/data", 3, 5000L);
 	    kvServer.start();
 	} catch (Exception e) {

@@ -49,6 +49,14 @@ public class KVClient implements IKVClient {
 
     }
 
+    public KVMessage keyrange() throws Exception {
+	return this.store.keyrange();
+    }
+
+    public KVMessage keyrangeread() throws Exception {
+	return this.store.keyrangeread();
+    }
+
     public void logLevel(Level level) throws Exception {
 
 	if (level.equals(Level.ALL) ||

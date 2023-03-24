@@ -38,7 +38,7 @@ public class KVStore implements KVCommInterface {
     public void connect() throws Exception {
 	this.socket = new Socket(this.currentAddress, this.currentPort);
 
-	ProtocolMessage keyRangeMessage = this.keyrange(this.socket);
+	ProtocolMessage keyRangeMessage = this.keyrange();
 	this.metadata = this.parseKeyRangeMessage(keyRangeMessage);
     }
 
@@ -74,7 +74,7 @@ public class KVStore implements KVCommInterface {
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", putReply.getStatus(), putReply.getKey(), putReply.getValue())); 
 
 	if (putReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-	    ProtocolMessage keyRangeReply = this.keyrange(this.socket);
+	    ProtocolMessage keyRangeReply = this.keyrange();
 	    this.metadata = this.parseKeyRangeMessage(keyRangeReply);
 	    this.socket = this.identifySocketByKey(key);
 	    return this.put(key, value);
@@ -103,7 +103,7 @@ public class KVStore implements KVCommInterface {
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(), getReply.getValue())); 
 
 	if (getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-	    ProtocolMessage keyRangeReply = this.keyrange(this.socket);
+	    ProtocolMessage keyRangeReply = this.keyrange();
 	    this.metadata = this.parseKeyRangeMessage(keyRangeReply);
 	    this.socket = this.identifySocketByKey(key);
 	    return this.get(key);
@@ -112,10 +112,10 @@ public class KVStore implements KVCommInterface {
 	return getReply;
     }
 
-    public ProtocolMessage keyrange(Socket socket) throws Exception {
+    public ProtocolMessage keyrange() throws Exception {
 
-	OutputStream output = socket.getOutputStream();
-	InputStream input = socket.getInputStream();
+	OutputStream output = this.socket.getOutputStream();
+	InputStream input = this.socket.getInputStream();
 
 	String keyrangeRequest = "keyrange\r\n";
 	output.write(keyrangeRequest.getBytes());
