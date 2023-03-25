@@ -47,6 +47,12 @@ public class App_KVClient extends Thread {
 			case "get":
 				getValue(commands);
 				break;
+			case "keyrange":
+				keyrangeMessage(commands);
+				break;
+			case "keyrange_read":
+				keyrangeReadMessage(commands);
+				break;
 			case "help":
 				helpMessage();
 				break;
@@ -105,6 +111,8 @@ public class App_KVClient extends Thread {
 		System.out.println("To Disconnect -> disconnect");
 		System.out.println("To Update Or Add KV Pair -> put <key> <value>");
 		System.out.println("To Get KV Pair ->  get <key>");
+		System.out.println("To Get keyrange message -> keyrange");
+		System.out.println("To Get keyrange_read message -> keyrange_read");
 		System.out.println("To Change LogLevel -> logLevel <level>");
 		System.out.println("To Quit -> quit");
 		System.out.println("For Help -> help");
@@ -140,7 +148,7 @@ public class App_KVClient extends Thread {
 				System.out.println("Client currently not connected to a server. Please Connect To A Server");
 				return;
 			}
-			if (commands.length < 3) {
+			if (commands.length != 3) {
 				System.out.println("Invalid Number of Arguments");
 				return;
 			}
@@ -165,6 +173,61 @@ public class App_KVClient extends Thread {
 			System.out.println("ERROR: " + e.toString());
 		}
 	}
+
+    public void keyrangeMessage(String[] commands) {
+
+	if (!this.connected) {
+	    System.out.println("Client currently not connected to a server. Please Connect To A Server");
+	    return;
+	}
+
+	if (commands.length != 1) {
+	    System.out.println("Invalid Number of Arguments");
+	    return;
+	}
+
+	try {
+	    KVMessage message = this.client.keyrange();
+	    System.out.println(message.getKey());
+	} catch (EOFException e) {
+	    logger.info("Error: Server disconnected: " + e.toString());	
+	    System.out.println("Error: Server disconnected: " + e.toString());	
+	    this.connected = false;
+	    this.client.disconnect();
+	} catch (Exception e) {
+	    logger.error("ERROR: " + e.toString());
+	    System.out.println("ERROR: " + e.toString());
+	}
+
+    }
+
+    public void keyrangeReadMessage(String[] commands) {
+
+	if (!this.connected) {
+	    System.out.println("Client currently not connected to a server. Please Connect To A Server");
+	    return;
+	}
+
+	if (commands.length != 1) {
+	    System.out.println("Invalid Number of Arguments");
+	    return;
+	}
+
+	try {
+	    KVMessage message = this.client.keyrangeread();
+	    System.out.println(message.getKey());
+	} catch (EOFException e) {
+	    logger.info("Error: Server disconnected: " + e.toString());	
+	    System.out.println("Error: Server disconnected: " + e.toString());	
+	    this.connected = false;
+	    this.client.disconnect();
+	} catch (Exception e) {
+	    logger.error("ERROR: " + e.toString());
+	    System.out.println("ERROR: " + e.toString());
+	}
+
+    }
+
 
 	public void shutClientDown(String[] commands) throws Exception {
 		if (commands.length != 1) {
