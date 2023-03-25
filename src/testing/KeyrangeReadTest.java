@@ -216,7 +216,7 @@ public class KeyrangeReadTest extends TestCase {
     }
 
     @Test
-    public void testKeyrangeReadDifferedStartsAndEnds() {
+    public void testKeyrangeReadDifferentStartsAndEnds() {
         Exception ex = null;
 
         ProtocolMessage reply1 = null;

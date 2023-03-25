@@ -20,6 +20,9 @@ import junit.framework.TestCase;
 public class ClientRandomTest extends TestCase {
 
     private KVStore kvStore1;
+    private KVStore kvStore2;
+    private KVStore kvStore3;
+    private KVStore kvStore4;
     private KVServer kvServer1;
     private KVServer kvServer2;
     private KVServer kvServer3;
@@ -62,7 +65,7 @@ public class ClientRandomTest extends TestCase {
             kvServer1 = new KVServer("localhost", 5001, "localhost", ecs.getPort(), "src/testing/data/data1", 3, 500L);
             kvServer2 = new KVServer("localhost", 5002, "localhost", ecs.getPort(), "src/testing/data/data2", 3, 500L);
             kvServer3 = new KVServer("localhost", 5003, "localhost", ecs.getPort(), "src/testing/data/data3", 3, 500L);
-            kvServer4 = new KVServer("localhost", 5004, "localhost", ecs.getPort(), "src/testing/data/data4", 3, 10000L);
+            kvServer4 = new KVServer("localhost", 5004, "localhost", ecs.getPort(), "src/testing/data/data4", 3, 20000L);
         } catch (Exception e) {
             e.printStackTrace();
             return;
@@ -81,12 +84,18 @@ public class ClientRandomTest extends TestCase {
         }
 
         kvStore1 = new KVStore("localhost", kvServer1.getPort());
+        kvStore2 = new KVStore("localhost", kvServer2.getPort());
+        kvStore3 = new KVStore("localhost", kvServer3.getPort());
+        kvStore4 = new KVStore("localhost", kvServer4.getPort());
 
     }
 
     public void tearDown() {
 
         kvStore1.disconnect();
+	kvStore2.disconnect();
+	kvStore3.disconnect();
+	kvStore4.disconnect();
         kvServer4.close();
         kvServer3.close();
         kvServer2.close();
@@ -201,20 +210,14 @@ public class ClientRandomTest extends TestCase {
     public void testClientRandomGetAfterReplication() {
         Exception ex = null;
 
-        try {
-            Thread.sleep(1000);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return;
-        }
-
 	KVMessage reply = null;
 
         try {
             kvStore1.connect();
             kvStore1.put("key", "value");
 	    Thread.sleep(1000);
-	    reply = kvStore1.get("key");
+	    kvStore2.connect();
+	    reply = kvStore2.get("key");
         } catch (Exception e) {
             ex = e;
         }
@@ -231,24 +234,18 @@ public class ClientRandomTest extends TestCase {
 
 	KVMessage reply = null;
 
-	boolean gotNullKey = false;
-
         try {
-            kvStore1.connect();
-	    kvStore1.put("kkkvvvkk", "value4");
-	    for (int i = 0; i < 1000; i++) {
-		reply = kvStore1.get("kkkvvvkk");
-		if (reply.getStatus() == StatusType.GET_ERROR) {
-		    gotNullKey = true;
-		}
-	    }
+            kvStore4.connect();
+	    kvStore3.connect();
+	    kvStore4.put("kkkvvvkk", "value4");
+	    reply = kvStore3.get("kkkvvvkk");
         } catch (Exception e) {
             ex = e;
         }
 
         assertNull(ex);
 
-	assertTrue(gotNullKey);
+	assertEquals(reply.getStatus(), StatusType.GET_ERROR);
 
     }
 

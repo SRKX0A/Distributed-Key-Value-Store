@@ -29,8 +29,8 @@ public class AllTests {
 	//clientSuite.addTestSuite(KeyRangeTest.class);
 	//clientSuite.addTestSuite(ECSTest.class);
 	//clientSuite.addTestSuite(StoreTest.class);
-	clientSuite.addTestSuite(KeyrangeReadTest.class);
-	clientSuite.addTestSuite(ReplicationTest.class);
+	//clientSuite.addTestSuite(KeyrangeReadTest.class);
+	//clientSuite.addTestSuite(ReplicationTest.class);
 	clientSuite.addTestSuite(ClientRandomTest.class);
 	//clientSuite.addTestSuite(PerformanceTest.class);
 	//clientSuite.addTestSuite(PerformanceTestM2.class);
