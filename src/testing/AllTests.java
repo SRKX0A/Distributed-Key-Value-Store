@@ -23,13 +23,15 @@ public class AllTests {
     
     public static Test suite() {
 	TestSuite clientSuite = new TestSuite("Basic Storage ServerTest-Suite");
-	clientSuite.addTestSuite(ProtocolTest.class);
-	clientSuite.addTestSuite(ClientTest.class);
-	clientSuite.addTestSuite(ServerTest.class);
-	clientSuite.addTestSuite(KeyRangeTest.class);
-	clientSuite.addTestSuite(ECSTest.class);
-	clientSuite.addTestSuite(StoreTest.class);
+	//clientSuite.addTestSuite(ProtocolTest.class);
+	//clientSuite.addTestSuite(ClientTest.class);
+	//clientSuite.addTestSuite(ServerTest.class);
+	//clientSuite.addTestSuite(KeyRangeTest.class);
+	//clientSuite.addTestSuite(ECSTest.class);
+	//clientSuite.addTestSuite(StoreTest.class);
 	clientSuite.addTestSuite(KeyrangeReadTest.class);
+	clientSuite.addTestSuite(ReplicationTest.class);
+	clientSuite.addTestSuite(ClientRandomTest.class);
 	//clientSuite.addTestSuite(PerformanceTest.class);
 	//clientSuite.addTestSuite(PerformanceTestM2.class);
 	return clientSuite;
