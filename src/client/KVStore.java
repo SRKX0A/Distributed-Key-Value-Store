@@ -103,9 +103,8 @@ public class KVStore implements KVCommInterface {
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(), getReply.getValue())); 
 
 	if (getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
-	    ProtocolMessage keyRangeReply = this.keyrange();
-	    this.metadata = this.parseKeyRangeMessage(keyRangeReply);
-	    this.socket = this.identifySocketByKey(key);
+	    ProtocolMessage keyRangeReadReply = this.keyrangeread();
+	    this.socket = this.chooseReplica(keyRangeReadReply, key);
 	    return this.get(key);
 	}
 
@@ -183,6 +182,63 @@ public class KVStore implements KVCommInterface {
 	msgBuf = tmpBuf;
 
 	return ProtocolMessage.fromBytesAtClient(msgBuf);
+    }
+
+    private Socket chooseReplica(ProtocolMessage reply, String key) throws Exception {
+    
+	Random rand = new Random();
+
+	byte[] hashedKey = this.hashKey(key);
+
+	List<KeyRange> reps = parseKeyRangeRead(reply, hashedKey);
+	
+	int n = rand.nextInt(reps.size());
+	
+	KeyRange chosenOne = reps.get(n);
+
+	Socket socket = new Socket(chosenOne.getAddress(), chosenOne.getPort());
+	this.currentAddress = chosenOne.getAddress();
+	this.currentPort = chosenOne.getPort();
+	
+	return socket;
+    }
+    
+    private List<KeyRange> parseKeyRangeRead(ProtocolMessage reply, byte[] key) throws Exception {
+    
+    	var replicas = new ArrayList<KeyRange>();
+	
+	String keyRangeReadMessage = reply.getKey();
+
+	List<String> servers = Arrays.asList(keyRangeReadMessage.split(";"));
+	
+	for(var server: servers) {
+	
+	    List<String> elems = Arrays.asList(server.split(","));
+
+	    byte[] rangeFrom = this.parseHexString(elems.get(1));
+	    byte[] rangeTo = this.parseHexString(elems.get(0));
+
+	    List<String> addressAndPort = Arrays.asList(elems.get(2).split(":"));
+
+	    String address = addressAndPort.get(0);
+	    int port = Integer.parseInt(addressAndPort.get(1));
+
+	    KeyRange nodeRange = new KeyRange(port, address, rangeFrom, rangeTo);
+
+	    if (nodeRange.withinKeyRange(key)) {
+		replicas.add(nodeRange);
+	    }
+
+	}	
+	
+	if (replicas.size() < 1) {
+	    throw new ArithmeticException("replica size is too small!");
+	} else if (replicas.size() > 3) {
+	    throw new ArithmeticException("replica size is too big!");
+	}
+
+	return replicas;
+    
     }
 
     private Socket identifySocketByKey(String key) throws Exception {

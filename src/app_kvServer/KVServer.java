@@ -312,7 +312,7 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SERVER_INIT_FIN, null);
-
+	
 	serverSocket.close();
 
 	this.serverFileManager.clearPartitionedFiles();
