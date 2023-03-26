@@ -200,17 +200,17 @@ public class KVServer extends Thread implements IKVServer {
 
         StatusType response = StatusType.PUT_SUCCESS;
 
-        synchronized (this.memtableLock) {
-            boolean presentInCache = this.inCache(key);
-            String previousValue = this.memtable.put(key, value);
+	synchronized (this.memtableLock) {
+	    boolean presentInCache = this.inCache(key);
+	    String previousValue = this.memtable.put(key, value);
 
-        if (value.equals("null")) {
-                response = StatusType.PUT_SUCCESS;
-            } else if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
-                response = StatusType.PUT_UPDATE;
-            }
+	    if (value.equals("null")) {
+		response = StatusType.PUT_SUCCESS;
+	    } else if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
+		response = StatusType.PUT_UPDATE;
+	    }
 
-        if (this.memtable.size() >= this.cacheSize) {
+	    if (this.memtable.size() >= this.cacheSize) {
 		this.dumpCounter++;
 		this.serverFileManager.dumpCacheToStoreFile();
 		if (this.dumpCounter == 3) {
@@ -218,10 +218,10 @@ public class KVServer extends Thread implements IKVServer {
 		    this.serverFileManager.clearOldStoreFiles();
 		    this.dumpCounter = 0;
 		}
-            }
-        }
+	    }
+	}
 
-        return response;
+	return response;
 
     }
 
@@ -275,9 +275,11 @@ public class KVServer extends Thread implements IKVServer {
 
 	logger.info(String.format("Sending all files to <%s,%d>", address, port));
 	
-	this.serverFileManager.dumpCacheToStoreFile();
-	this.serverFileManager.compactStoreFiles();
-	this.serverFileManager.clearOldStoreFiles();
+	synchronized (this.memtableLock) {
+	    this.serverFileManager.dumpCacheToStoreFile();
+	    this.serverFileManager.compactStoreFiles();
+	    this.serverFileManager.clearOldStoreFiles();
+	}
 
 	byte[] serverHash = this.hashIP(this.getHostname(), this.getPort());
 	KeyRange serverKeyRange = this.metadata.get(serverHash);
@@ -373,9 +375,11 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	try {
-	    this.serverFileManager.dumpCacheToStoreFile();
-	    this.serverFileManager.compactStoreFiles();
-	    this.serverFileManager.clearOldStoreFiles();
+	    synchronized (this.memtableLock) {
+		this.serverFileManager.dumpCacheToStoreFile();
+		this.serverFileManager.compactStoreFiles();
+		this.serverFileManager.clearOldStoreFiles();
+	    }
 	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_1, firstReplicaKeyRange.getAddress(), firstReplicaKeyRange.getPort());
 	} catch (Exception e) {
 	    logger.warn("Failed to complete replication on first replica: " + e.getMessage());
@@ -394,9 +398,11 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	try {
-	    this.serverFileManager.dumpCacheToStoreFile();
-	    this.serverFileManager.compactStoreFiles();
-	    this.serverFileManager.clearOldStoreFiles();
+	    synchronized (this.memtableLock) {
+		this.serverFileManager.dumpCacheToStoreFile();
+		this.serverFileManager.compactStoreFiles();
+		this.serverFileManager.clearOldStoreFiles();
+	    }
 	    this.sendFilesToReplicaServer(ServerMessage.StatusType.REPLICATE_KV_2, secondReplicaKeyRange.getAddress(), secondReplicaKeyRange.getPort());
 	} catch (Exception e) {
 	    logger.warn("Failed to complete replication on second replica: " + e.getMessage());
