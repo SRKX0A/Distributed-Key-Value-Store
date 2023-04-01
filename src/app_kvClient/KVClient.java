@@ -1,10 +1,13 @@
 package app_kvClient;
 
+import java.util.TreeMap;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import client.KVCommInterface;
 import client.KVStore;
+import client.Subscribe;
 import shared.messages.KVMessage;
 
 public class KVClient implements IKVClient {
@@ -55,6 +58,18 @@ public class KVClient implements IKVClient {
 
     public KVMessage keyrangeread() throws Exception {
 	return this.store.keyrangeread();
+    }
+	
+    public String getSubscribe() throws Exception{
+    	return this.store.getSubscription();
+    }
+	
+    public KVMessage addSubscribe(String key) throws Exception{
+    	return this.store.addSubscribe(key);
+    }
+
+    public KVMessage removeSubscribe(String key) throws Exception{
+    	return this.store.removeSubscribe(key);
     }
 
     public void logLevel(Level level) throws Exception {

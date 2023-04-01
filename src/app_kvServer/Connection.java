@@ -68,7 +68,11 @@ public class Connection extends Thread {
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
 		    this.handleReplicateKVHandshakeMessage(request);
 		    return;
-		} else {
+		} else if (request.getStatus() == StatusType.SUB_INIT){
+		    this.handleSubscribeMessage();
+		} else if (request.getStatus() == StatusType.SUB_REMOVE){
+		    this.handleRemoveSubscribeMessage();
+		}else {
 		    this.handleInvalidMessageRequestType();
 		}
 
@@ -170,6 +174,26 @@ public class Connection extends Thread {
 
     }
 
+    public void handleSubscribeMessage(KVMessage request) throws Exception{
+    
+	if(this.kvServer.addSub(request.getKey(),request.getValue()).equals("null")){
+		sendMessage(this.output.StatusType.SUB_ERROR,request.getKey(),"null");	
+	}
+	else{
+		sendMessage(this.output.StatusType.SUB_SUCCESS, request.getKey(),"null");
+	}
+	    
+    }
+	
+    public void handleRemoveSubscribeMessage(KVMessage request) throws Exception{
+    	if(this.kvServer.removeSub(request.getKey(),request.getValue()).equals("null")){
+		sendMessage(this.output.StatusType.REMOVE_SUB_ERROR,request.getKey(),"null");
+	}
+	else{
+		sendMessage(this.output.StatusType.REMOVE_SUB_SUCCESS, request.getKey(),"null");
+	}
+    
+    }
 
     public void handleInvalidMessageRequestType() throws Exception {
 	logger.error("Client message format failure: Invalid request status.");

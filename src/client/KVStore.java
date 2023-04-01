@@ -20,6 +20,8 @@ public class KVStore implements KVCommInterface {
     private Socket socket;
     private String currentAddress;
     private int currentPort;
+	
+    private TreeMap<String, Subscribe> subs;
 
     private TreeMap<byte[], KeyRange> metadata;
 
@@ -32,6 +34,7 @@ public class KVStore implements KVCommInterface {
 	this.currentAddress = address;	
 	this.currentPort = port;
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
+	this.subs = new TreeMap<String, Subscribe>(); //might want to add a comparator
     }
 
     @Override
@@ -182,6 +185,115 @@ public class KVStore implements KVCommInterface {
 	msgBuf = tmpBuf;
 
 	return ProtocolMessage.fromBytesAtClient(msgBuf);
+    }
+	
+    public String getSubscription() throws Exception {
+    	
+	var curr = this.subs;
+	
+	StringBuilder currSubs = new StringBuilder("Subscribed to: ");
+
+	for(var entry: curr.entrySet()){
+		
+		var key = entry.getKey();
+		var addr = entry.getValue().getSocket().getInetAddress();
+		var port = entry.getValue().getSocket().getPort();
+		
+		currSubs.append(key+","+addr+":"+Integer.toString(port)+";");
+	}
+	
+	    return currSubs.toString();
+    }    
+	
+    public KVMessage addSubscribe(String key) throws Exception{
+    	
+	OutputStream output = this.socket.getOutputStream();
+	InputStream input = this.socket.getInputStream();
+
+	KVMessage find = this.findKey(key);
+	
+	if(find.getValue() == null){
+		logger.error("Error: Could not find key");
+		return find;
+	}
+	
+	logger.info(String.format("Subscription key %s with current value %s was found",find.getKey(),find.getValue()));
+	
+	//Notify Server Message
+	
+	String p = new String("sub_init "+key+"\r\n");
+	byte[] b = p.getBytes("UTF-8");
+
+	output.write(b);
+	output.flush();
+	
+	logger.info("Sent protocol message: SUB_INIT request with key = "+key);
+
+	ProtocolMessage notifyReply = this.receiveMessage(input);
+	
+	logger.info(String.format("Received protocol message: status = %s, key = %s, value=%s",notifyReply.getStatus(),notifyReply.getKey(),notifyReply.getValue()));
+	
+	return notifyReply;
+
+    }
+
+    public KVMessage removeSubscribe(String key) throws Exception{
+    
+  	OutputStream output = this.socket.getOutputStream();
+	InputStream input = this.socket.getInputStream();
+
+	KVMessage find = this.findKey(key);
+	
+	if(find.getValue() == null){
+		logger.error("Error: Could not find key");
+		return find;
+	}
+	
+	logger.info(String.format("Subscription key %s with current value %s was found",find.getKey(),find.getValue()));
+	
+	//Notify Server Message
+	
+	String p = new String("unsub "+key+"\r\n");
+	byte[] b = p.getBytes("UTF-8");
+
+	output.write(b);
+	output.flush();
+	
+	logger.info("Sent protocol message: UNSUB request with key = "+key);
+
+	ProtocolMessage delReply = this.receiveMessage(input);
+	
+	logger.info(String.format("Received protocol message: status = %s, key = %s, value= %s", delReply.getStatus(), delReply.getKey(), delReply.getValue()));
+	
+	return delReply;
+ 
+    }
+
+    private KVMessage findKey(String key) throws Exception{
+    	
+	OutputStream output = this.socket.getOutputStream();
+	InputStream input = this.socket.getInputStream();
+    	
+	String p = new String("get "+ key + "\r\n");
+	byte[] b = p.getBytes("UTF-8");
+    	
+	output.write(b);
+	output.flush();
+	
+	ProtocolMessage getReply = this.receiveMessage(input);
+
+	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", getReply.getStatus(), getReply.getKey(),getReply.getValue()));
+
+	if(getReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE){
+		ProtocolMessage keyRangeReply = this.keyrange();
+		//might not need to get keyrange again just use existing one known to client
+		this.metadata = this.parseKeyRangeMessage(keyRangeReply);
+		this.socket = this.identifySocketByKey(key);
+		return this.findKey(key);
+	}
+	
+	return getReply;
+
     }
 
     private Socket chooseReplica(ProtocolMessage reply, String key) throws Exception {

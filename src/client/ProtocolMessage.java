@@ -60,6 +60,12 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    case "replicate_kv_handshake_nack":
 		protocolStatus = KVMessage.StatusType.REPLICATE_KV_HANDSHAKE_NACK;
 		break;
+	    case "sub_init":
+		protocolStatus = KVMessage.StatusType.SUB_INIT;
+		break;
+	    case "unsub":
+		protocolStatus = KVMessage.StatusType.UNSUB;
+		break;
 	    default:
 		throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
 	}
@@ -113,6 +119,27 @@ public class ProtocolMessage implements Serializable, KVMessage {
 
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
+	
+	} else if(protocolStatus == KVMessage.StatusType.SUB_INIT){
+	    
+	    String key = msgString.substring(indexOfFirstSpace+1);
+
+	    if(!key.endsWith("\r\n")){
+	    	throw new IllegalArgumentException("Error: Malformed message");
+	    }
+
+	    protocolKey = key.substring(0,key.length()-2);
+	    protocolValue = "null";
+	
+	} else if(protocolStatus == KVMessage.StatusType.UNSUB){
+	    
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+	    if(!key.endsWith("\r\n")){
+	    	throw new IllegalArgumentException("Error: Malformed message");
+	    }
+
+	    protocolKey = key.substring(0,key.length() - 2);
+	    protocolValue = "null";
 	}
 
 	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
@@ -152,7 +179,13 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = StatusType.KEYRANGE_READ_SUCCESS;
 	} else if (status.toLowerCase().equals("server_not_responsible")) {
 	    protocolStatus = StatusType.SERVER_NOT_RESPONSIBLE;
-	} else {
+	} else if (status.toLowerCase().equals("sub_init_success")){
+	    protocolStatus = StatusType.SUB_INIT_SUCCESS;
+    	} else if (status.toLowerCase().equals("unsub_success")){
+	    protocolStatus = StatusType.UNSUB_SUCCESS;
+	}else if (status.toLowerCase().equals("sub_error")){
+	    protocolStatus = StatusType.SUB_ERROR;
+	}else {
 	    throw new IllegalArgumentException("Error: Malformed StatusType response from server");
 	}
 
@@ -209,7 +242,16 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = "null";
 	    protocolValue = "null";
 
-	} else {
+	} else if (protocolStatus == StatusType.SUB_SUCCESS || protocolStatus == StatusType.UNSUB_SUCCESS || protocolStatus == StatusType.SUB_ERROR){
+	   
+	   if (!msgString.endsWith("\r\n")){
+	   	throw new IllegalArgumentException("Error: Malformed message from server");
+	   }
+
+	   protocolKey = key.substring(0,key.length()-2);
+	   protocolValue = "null";
+
+	}else {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);
 

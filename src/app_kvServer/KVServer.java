@@ -49,6 +49,8 @@ public class KVServer extends Thread implements IKVServer {
     private long replicationDelay;
 
     private volatile boolean online;
+	
+    private TreeMap<String,List<Subscribe>> subs;
 
     /**
     * Start KV Server at given port
@@ -77,6 +79,8 @@ public class KVServer extends Thread implements IKVServer {
 	this.metadata = new TreeMap<byte[], KeyRange>(new ByteArrayComparator());
 	this.replicationTimer = new Timer("Replication Timer");
 	this.replicationDelay = replicationDelay;
+	
+	this.subs = new TreeMap<String,List<String>>();
 
 	logger.info("Starting server...");	
 	this.clientSocket = new ServerSocket(port, 0, InetAddress.getByName(address));
@@ -208,6 +212,8 @@ public class KVServer extends Thread implements IKVServer {
 		response = StatusType.PUT_SUCCESS;
 	    } else if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
 		response = StatusType.PUT_UPDATE;
+		this.notifyClients(key,value);
+
 	    }
 
 	    if (this.memtable.size() >= this.cacheSize) {
@@ -561,6 +567,176 @@ public class KVServer extends Thread implements IKVServer {
 
     public ServerFileManager getServerFileManager() {
 	return this.serverFileManager;
+    }
+
+    public String getSubscription(){
+    
+    	var subs = this.subs;
+	
+	StringBuilder c = new StringBuilder("Current keys and clients subscribed to it: ");
+
+	try{
+		for(var entry: subs.entrySet()){
+			
+			var key = entry.getKey();
+			List<Subscribe> clients = entry.getValue();
+			
+			c.append(key+"<");
+			for(var cl: clients){
+				c.append(cl.getAddr()+":"cl.getPort()+";");
+			}
+			c.append(">");
+		}
+	}
+	catch(Exception e){
+		throw new RunTimeException("Error: subs Treemap does not exist!");
+	}
+
+	return c.toString();
+    }
+
+
+    public String removeSub(String key, String client){
+    
+    	logger.info("Client "+client+" request to subscribe to key = "+key);
+    	
+	if(!this.subs.containsKey(key)){
+		logger.error("Key "+key+" is not in subscription list!");
+		return "null";
+	}
+	
+	if(!this.subs.get(key).remove(client)){
+		logger.error("Client was never subsribed!");
+		return "null";
+	}
+	
+	logger.info("Client unsubscribed successful");
+	
+	return client;
+    }
+
+    public String addSub(String key, String client){
+    		
+	logger.info("Client "+client+" request to subscribe to key = "+key);
+		
+	if(!this.subs.containsKey(key)){
+		List<String> cl = new List<String>(client);
+		subs.put(key,cl);
+		logger.info("New key "+key+" added to subscription list, client "+client);
+		return "null";
+	} 
+    	
+	if(!this.findKey(key) == "null"){
+		kogger.error("Key "+key+" does not exist!");
+		return "null";
+	}
+	
+	var sub = this.subs;
+	
+	List<String> clientList = sub.get(key);
+		
+	if(clientList.contains(client)){
+		logger.error("Client has already subscribed to key");
+		return "null";
+	}
+
+	if(!this.subs.get(key).add(client)){
+		logger.error("Client cannot subscribe!");
+		return "null";
+	}
+	
+	logger.info("Added client "+client+" to key = "+ key+" list");
+		
+	return key;
+
+    }
+
+
+    private void notifyClients(String key, String value){
+    
+	if(!this.subs.contains(key)){
+		logger.info("No notifications need to be sent about KV change");
+		return;
+	}
+	
+	logger.info("Notifying subscribers of value change for key = "+key);
+	
+	var subs = this.subs;
+	
+	try{
+		synchronized(this.subs){
+			for(var entry: subs.entrySet()){
+	
+				List<String> clients = entry.getValue();
+
+				for(var cli : clients){
+			
+					String[] split = cli.split();
+
+					var addr = split[0];
+					var port = split[1];
+
+					Socket serverSocket = new Socket(addr,Integer.parseInt(port));
+			
+					OutputStream output = serverSocket.getOutputStream();
+					
+					StatusType status = StatusType.SUB_UPDATE;
+
+					if(value.equals("null")){
+						status = StatusType.UNSUB;
+					}
+
+					ProtocolMessage notifyMessage = new ProtocolMessage(status,key,value);
+					
+					logger.info("Notified client = "+client+" with key = "+key+" with status = "+notifyMessage.getStatus());
+
+					output.write(initialMessage.getBytes());
+					output.flush();
+			
+					socket.shutdownOutput();
+					socket.close();
+				}
+		
+
+			}
+		}
+	}
+	catch(Exception e){
+		logger.error("Error: "+ e.toString());
+		System.out.println("Error: "+ e.toString());
+	}
+    
+    }
+
+    private String findKV(String key){
+    	if (this.memtable.containsKey(key)) {
+            logger.info("Got key = " + key + " from cache with value = " + this.memtable.get(key));
+            return this.memtable.get(key);
+        }
+
+	String value = this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
+
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from storage with value = " + value);
+
+	    if (this.state != ServerState.SERVER_REBALANCING) {
+		synchronized (this.memtableLock) {
+		    this.memtable.put(key, value);
+		    if (this.memtable.size() >= this.cacheSize) {
+			this.dumpCounter++;
+			this.serverFileManager.dumpCacheToStoreFile();
+			if (this.dumpCounter == 3) {
+			    this.serverFileManager.compactStoreFiles();
+			    this.serverFileManager.clearOldStoreFiles();
+			    this.dumpCounter = 0;
+			}
+		    }
+		}
+	    }
+
+	    return value;
+	}
+	return "null";
     }
 
     private byte[] hashIP(String address, int port) {
