@@ -60,16 +60,12 @@ public class KVClient implements IKVClient {
 	return this.store.keyrangeread();
     }
 	
-    public String getSubscribe() throws Exception{
-    	return this.store.getSubscription();
-    }
-	
-    public KVMessage addSubscribe(String key) throws Exception{
-    	return this.store.addSubscribe(key);
+    public KVMessage subscribe(String key) throws Exception {
+    	return this.store.subscribe(key);
     }
 
-    public KVMessage removeSubscribe(String key) throws Exception{
-    	return this.store.removeSubscribe(key);
+    public KVMessage unsubscribe(String key) throws Exception {
+    	return this.store.unsubscribe(key);
     }
 
     public void logLevel(Level level) throws Exception {

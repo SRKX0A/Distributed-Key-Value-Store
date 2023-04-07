@@ -62,17 +62,17 @@ public class Connection extends Thread {
 		    this.handleKeyrangeRequest(request);
 		} else if (request.getStatus() == StatusType.KEYRANGE_READ) {
 		    this.handleKeyrangereadRequest(request);
+		} else if (request.getStatus() == StatusType.SUBSCRIBE) {
+		    this.handleSubscribeMessage();
+		} else if (request.getStatus() == StatusType.UNSUBSCRIBE) {
+		    this.handleRemoveSubscribeMessage();
 		} else if (request.getStatus() == StatusType.SERVER_INIT) {
 		    this.handleServerInitMessage();
 		    return;
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
 		    this.handleReplicateKVHandshakeMessage(request);
 		    return;
-		} else if (request.getStatus() == StatusType.SUB_INIT){
-		    this.handleSubscribeMessage();
-		} else if (request.getStatus() == StatusType.SUB_REMOVE){
-		    this.handleRemoveSubscribeMessage();
-		}else {
+		} else {
 		    this.handleInvalidMessageRequestType();
 		}
 
@@ -153,27 +153,6 @@ public class Connection extends Thread {
 	}
     }
 
-    public void handleServerInitMessage() throws Exception {
-	new ServerConnection(this.socket, this.kvServer).start();
-    }
-
-    public void handleReplicateKVHandshakeMessage(KVMessage request) throws Exception {
-	
-	String currentTopology = this.kvServer.getKeyRangeSuccessString();
-	String senderTopology = request.getKey();
-
-	if (this.kvServer.getServerState() != KVServer.ServerState.SERVER_INITIALIZING && !currentTopology.equals(senderTopology)) {
-	    logger.warn("Replication request denied due to differing topology");
-	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_NACK, null, null);
-	} else {
-	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_ACK, null, null);
-	    new ServerConnection(this.socket, this.kvServer).start();
-	}
-
-	return;
-
-    }
-
     public void handleSubscribeMessage(KVMessage request) throws Exception{
     
 	if(this.kvServer.addSub(request.getKey(),request.getValue()).equals("null")){
@@ -193,6 +172,28 @@ public class Connection extends Thread {
 		sendMessage(this.output.StatusType.REMOVE_SUB_SUCCESS, request.getKey(),"null");
 	}
     
+    }
+
+
+    public void handleServerInitMessage() throws Exception {
+	new ServerConnection(this.socket, this.kvServer).start();
+    }
+
+    public void handleReplicateKVHandshakeMessage(KVMessage request) throws Exception {
+	
+	String currentTopology = this.kvServer.getKeyRangeSuccessString();
+	String senderTopology = request.getKey();
+
+	if (this.kvServer.getServerState() != KVServer.ServerState.SERVER_INITIALIZING && !currentTopology.equals(senderTopology)) {
+	    logger.warn("Replication request denied due to differing topology");
+	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_NACK, null, null);
+	} else {
+	    sendMessage(this.output, StatusType.REPLICATE_KV_HANDSHAKE_ACK, null, null);
+	    new ServerConnection(this.socket, this.kvServer).start();
+	}
+
+	return;
+
     }
 
     public void handleInvalidMessageRequestType() throws Exception {

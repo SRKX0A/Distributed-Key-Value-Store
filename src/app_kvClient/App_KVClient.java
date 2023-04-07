@@ -54,14 +54,11 @@ public class App_KVClient extends Thread {
 			case "keyrange_read":
 				keyrangeReadMessage(commands);
 				break;
-			case "subscription":
-				subscriptionMessage(commands);
+			case "subscribe":
+				subscribeMessage(commands);
 				break;
-			case "subscribe_add":
-				subscribeToMessage(commands);
-				break;
-			case "subscribe_delete":
-				subscribeDeleteMessage(commands);
+			case "unsubscribe":
+				unsubscribeMessage(commands);
 				break;
 			case "help":
 				helpMessage();
@@ -238,124 +235,40 @@ public class App_KVClient extends Thread {
 
     }
     
-    public void subscriptionMessage(String[] commands){
     
-	if(commands.length != 1){
-	   System.out.println("Invlaid Number of Arguments");
-	   return;
-	}
-
-	try{
-           String subs = this.client.getSubscribe();
-	   
-	   System.out.println("Current subscriptions: "+ subs);
-
-	   //var s = subs.entrySet();
-	   //should add logger to log this?
-	   //System.out.print("Current subscriptions: ");
-	   //for(var entry: subs.entrySet()){
-	   //
-	//	String key = entry.getKey();
-	//	String value = entry.getValue();
-//
-//		System.out.print(","+key+":"+value+" ");
-	   
-	 //  }
-	
-	}
-	catch(Exception e){
-	   logger.error("ERROR: "+ e.toString());
-	   System.out.println("ERROR: "+ e.toString());
-	
-	}
-
-    }
+    public void subscribeMessage(String[] commands) {
     
-    public void subscribeToMessage(String[] commands){
-    
-	if(commands.length != 2){
-	  System.out.println("Invalid Number of Arguments");
+	if (commands.length != 2) {
+	    System.out.println("Invalid Number of Arguments");
 	}
 
-	try{
-	
-	  this.client.addSubscribe(commands[1]);
-	}
-	catch(Exception e){
-	
-	  logger.error("Error: "+e.toString());
-	  System.out.println("Error: "+e.toString());
+	try {
+	    KVMessage reply = this.client.subscribe(commands[1]);
+	    System.out.println(reply.getStatus())
+	} catch(Exception e) {
+	    logger.error("ERROR: " + e.getMessage());
+	    System.out.println("ERROR: " + e.getMessage());
 	}
     
     }
     
     public void subscribeDeleteMessage(String[] commands){
     	
-	if(commands.length != 2){
+	if (commands.length != 2) {
 	  System.out.println("Invalid Number of Arguments");
 	  return;
 	}
 
-	try{
-	   //again maybe get bool??
-	   this.client.removeSubscribe(commands[1]);
-	   
-	}
-	catch(Exception e){
-	
-		logger.error("Error: "+e.toString());
-		System.out.println("Error: "+e.toString());
+	try {
+	    KVMessage reply = this.client.removeSubscribe(commands[1]);
+	    System.out.println(reply.getStatus())
+	} catch(Exception e) {
+	    logger.error("ERROR: " + e.getMessage());
+	    System.out.println("ERROR: " + e.getMessage());
 	}
     
     }
 
-   //public void subscribeUpdateMessage(String[] commands){
-   //  
-   //  if(!this.connected){
-   //    System.out.println("Client currently not connected to a server");
-   //    return;
-   //  }
-
-   //  if(commands.length != 3){
-   //    System.out.println("Invalid Number of Arguments");
-   //    return;
-   //  } 
-   //  
-   //  var subs = this.client.getSubscription();
-   //  String oldKey = commands[1];
-   //  String newKey = commands[2];
-
-   //  if(!subs.containsKey(oldKey)){
-   //    logger.info("Not subscribed to key: %s", oldKey);
-   //    System.out.println("Not subscribed to key: %s",oldKey);
-   //    return;
-   //  }
-   //  
-   //  try{
-   //      
-   //      KVMessage findValue = this.client.get(newKey);
-   //  	
-   //      if(findValue.getValue() == null){
-   //        logger.error("Error: New key not found");
-   //        System.out.println("Error: New key not found");
-   //        return;
-   //      }
-   //      
-   //      // add vars to this??
-   //      this.client.removeSubscription(oldKey);
-   //      this.client.addSubscription(newKey);
-
-   //      System.out.println("Successfully updated subscription");
-
-   //  }
-   //  catch(Exception e){
-   //  	logger.error("Error: "+e.toString());
-   //  	System.out.println("Error: "+e.toString());
-   //  }
-
-   //
- 
-  
 	public void shutClientDown(String[] commands) throws Exception {
 		if (commands.length != 1) {
 		    System.out.println("Invalid Number of Arguments");
