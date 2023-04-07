@@ -631,24 +631,20 @@ public class KVServer extends Thread implements IKVServer {
     }
 	
 
-    private static void sendNotification(ObjectOutputStream output, String key, String value, String oldValue){
-    
-   	     
-	    SubscriptionMessage notify = new SubscriptionMessage(SubscriptionMessage.StatusType.KV_NOTIFICATION, key, value, oldValue);
-    	    
-	    try{	
-	    	output.writeObject(notify);
-	    	output.flush();
-	    } catch(Exception e){
-		
-		logger.error("Error: "+e.toString());
-		    
-	
-	    }
+    private static void sendNotification(ObjectOutputStream output, String key, String oldValue, String value) {
 
-	    logger.debug(String.format("Server sent a notification to client with status = %s",notify.getStatus()));
+	SubscriptionMessage notify = new SubscriptionMessage(SubscriptionMessage.StatusType.KV_NOTIFICATION, key, oldValue, value);
 
-	    return;
+	try{	
+	    output.writeObject(notify);
+	    output.flush();
+	} catch(Exception e){
+	    logger.error(e.getMessage());
+	}
+
+	logger.debug(String.format("Server sent a notification to client with status = %s", notify.getStatus()));
+
+	return;
     }
 
     private void notifyClients(String key, String value, String oldValue) {
@@ -657,54 +653,31 @@ public class KVServer extends Thread implements IKVServer {
 	    return;
 	}
 	
-	logger.info("Notifying subscribers that key = " + key + " had old value = " + oldValue +" now has value = " + value);
+	logger.info("Notifying subscribers that key = " + key + " with old value = " + oldValue + " now has value = " + value);
 	
-	try {
-	    synchronized(this.subs){
-		for(var entry: subs.entrySet()){
+	synchronized (this.subs) {
+	    try {
 
-		    List<ClientSubscriptionInfo> clients = entry.getValue();
+		List<ClientSubscriptionInfo> clients = this.subs.get(key);
 
-		    for(var cli : clients){
-			
-			String addr = cli.getAddress();
-			int port = cli.getPort();
+		for(var cli: clients) {
+		    String addr = cli.getAddress();
+		    int port = cli.getPort();
 
-			Socket serverSocket = new Socket(addr,port);
+		    Socket socket = new Socket(addr, port);
 
-			ObjectOutputStream output = new ObjectOutputStream(serverSocket.getOutputStream());
-			
-			sendNotification(output,key,value,oldValue);
+		    ObjectOutputStream output = new ObjectOutputStream(socket.getOutputStream());
 
-			/*
-			if(value.equals("null")){
-			    status = StatusType.UNSUBSRIBE;
-			}
-			*/
+		    sendNotification(output, key, oldValue, value);
 
-			/*
-			ProtocolMessage notifyMessage = new ProtocolMessage(status,key,value);
-
-			logger.info("Notified client = "+ client +" with key = " +key +" with status = " + notifyMessage.getStatus());
-
-			output.write(notifyMessage.getBytes());
-			output.flush();
-			*/
-			
-
-			serverSocket.shutdownOutput();
-			serverSocket.close();
-		    }
-
-
+		    socket.shutdownOutput();
+		    socket.close();
 		}
+
+	    } catch(Exception e) {
+		logger.error(e.getMessage());
 	    }
 	}
-	catch(Exception e){
-	    logger.error("Error: "+ e.toString());
-	    System.out.println("Error: "+ e.toString());
-	}
-	
     
     }
 
