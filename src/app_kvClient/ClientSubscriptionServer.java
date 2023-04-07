@@ -47,4 +47,12 @@ public class ClientSubscriptionServer extends Thread {
 
     }
 
+    public String getAddress() {
+	return this.serverSocket.getInetAddress().getHostName();
+    }
+
+    public int getPort() {
+	return this.serverSocket.getLocalPort();
+    }
+
 }

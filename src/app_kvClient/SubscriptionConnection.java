@@ -61,9 +61,9 @@ public class SubscriptionConnection extends Thread {
 	}
     }
 
-    public static ServerMessage receiveMessage(ObjectInputStream input) throws Exception {
+    public static SubscriptionMessage receiveMessage(ObjectInputStream input) throws Exception {
 
-	ServerMessage request = (SubscriptionMessage) input.readObject();
+	SubscriptionMessage request = (SubscriptionMessage) input.readObject();
 
 	logger.debug(String.format("Client subscription server received request from server with status = %s", request.getStatus()));
 

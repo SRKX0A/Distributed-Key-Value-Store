@@ -10,6 +10,7 @@ import java.util.TreeMap;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.apache.commons.cli.*;
 
 import logger.LogSetup;
 import shared.messages.KVMessage;
@@ -18,16 +19,21 @@ import shared.messages.KVMessage.StatusType;
 public class App_KVClient extends Thread {
 
 	public static Logger logger = Logger.getRootLogger();
+
 	private KVClient client;
 	private ClientSubscriptionServer subscriptionServer;
 
 	boolean running;
 	boolean connected;
 
-	public App_KVClient() {
-		this.client = new KVClient();
+	public App_KVClient(String address, int port) throws IOException {
 		this.running = true;
 		this.connected = false;
+
+		this.client = new KVClient();
+
+		this.subscriptionServer = new ClientSubscriptionServer(address, port);	
+		this.subscriptionServer.start();
 	}
 
 	public void parser(String message) throws Exception {
@@ -244,8 +250,8 @@ public class App_KVClient extends Thread {
 	}
 
 	try {
-	    KVMessage reply = this.client.subscribe(commands[1]);
-	    System.out.println(reply.getStatus())
+	    KVMessage reply = this.client.subscribe(commands[1], this.subscriptionServer.getAddress(), this.subscriptionServer.getPort());
+	    System.out.println(reply.getStatus());
 	} catch(Exception e) {
 	    logger.error("ERROR: " + e.getMessage());
 	    System.out.println("ERROR: " + e.getMessage());
@@ -261,8 +267,8 @@ public class App_KVClient extends Thread {
 	}
 
 	try {
-	    KVMessage reply = this.client.removeSubscribe(commands[1]);
-	    System.out.println(reply.getStatus())
+	    KVMessage reply = this.client.unsubscribe(commands[1], this.subscriptionServer.getAddress(), this.subscriptionServer.getPort());
+	    System.out.println(reply.getStatus());
 	} catch(Exception e) {
 	    logger.error("ERROR: " + e.getMessage());
 	    System.out.println("ERROR: " + e.getMessage());
@@ -278,6 +284,7 @@ public class App_KVClient extends Thread {
 		if (this.connected) {
 			disconnectFromServer(commands);
 		}
+		this.subscriptionServer.close();
 		System.out.println("Client Shutting Down...");
 		TimeUnit.SECONDS.sleep(1);
 		System.exit(1);
@@ -355,14 +362,46 @@ public class App_KVClient extends Thread {
 	}
 
 	public static void main(String[] args) {
-		try {
-			new LogSetup("logs/client.log", Level.OFF);
-			new App_KVClient().start();
-		} catch (IOException e) {
-			System.out.println("Error! Unable to initialize logger!");
-			e.printStackTrace();
-			System.exit(1);
-		}
-	}
+
+	    Option portOption = Option.builder("p").desc("port which client subscription server listens on").hasArg().required().type(String.class).build();
+	    Option addressOption = Option.builder("a").desc("address which client subscription server listens to").hasArg().type(String.class).build();
+
+	    Options options = new Options();	
+	    options.addOption(portOption);
+	    options.addOption(addressOption);
+
+	    CommandLineParser parser = new DefaultParser();
+	    CommandLine cmd = null;
+
+	    try {
+		cmd = parser.parse(options, args);
+	    } catch (ParseException pe) {
+		System.err.println("Parsing failed. Reason: " + pe.getMessage());
+		System.exit(1);
+	    }
+
+	    int port = 0;
+	    String address = "localhost";
+
+	    try {
+		port = (int) Integer.parseInt(cmd.getOptionValue("p"));
+	    } catch (Exception pe) {
+		System.err.println("Parsing failed. Reason: " + pe.getMessage());
+		System.exit(1);
+	    }
+
+	    if (cmd.hasOption("a")) {
+		address = cmd.getOptionValue("a"); 
+	    }
+
+	    try {
+		new LogSetup("logs/client.log", Level.OFF);
+		new App_KVClient(address, port).start();
+	    } catch (IOException e) {
+		System.out.println("Error! Unable to initialize logger!");
+		e.printStackTrace();
+		System.exit(1);
+	    }
+    }
 
 }
