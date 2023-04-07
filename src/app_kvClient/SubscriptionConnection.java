@@ -17,7 +17,7 @@ public class SubscriptionConnection extends Thread {
     private ObjectInputStream input;
     private ObjectOutputStream output;
 
-    public SubscriptionConnection(Socket socket) throws Exception {
+    public SubscriptionConnection(Socket socket) throws IOException {
 	this.socket = socket;
 	this.output = new ObjectOutputStream(this.socket.getOutputStream());
 	this.input = new ObjectInputStream(this.socket.getInputStream());

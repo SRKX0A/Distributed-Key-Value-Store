@@ -184,12 +184,12 @@ public class KVStore implements KVCommInterface {
 	return ProtocolMessage.fromBytesAtClient(msgBuf);
     }
 	
-    public KVMessage subscribe(String key) throws Exception {
+    public KVMessage subscribe(String key, String address, int port) throws Exception {
     	
 	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 
-	String subscribeMessage = "subscribe " + key + "\r\n";
+	String subscribeMessage = "subscribe " + key + " " + address + " " + port + "\r\n";
 	output.write(subscribeMessage.getBytes());
 	output.flush();
 	
@@ -197,18 +197,18 @@ public class KVStore implements KVCommInterface {
 
 	ProtocolMessage subscribeReply = this.receiveMessage(input);
 	
-	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", subscribeReply.getStatus(), subscribeReply.getKey(), subcribeReply.getValue()));
+	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", subscribeReply.getStatus(), subscribeReply.getKey(), subscribeReply.getValue()));
 	
 	return subscribeReply;
 
     }
 
-    public KVMessage unsubscribe(String key) throws Exception {
+    public KVMessage unsubscribe(String key, String address, int port) throws Exception {
     
   	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 
-	String unsubscribeMessage = "unsubscribe " + key + "\r\n"
+	String unsubscribeMessage = "unsubscribe " + key + " " + address + " " + port + "\r\n";
 	output.write(unsubscribeMessage.getBytes());
 	output.flush();
 	

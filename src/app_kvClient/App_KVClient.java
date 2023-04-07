@@ -19,6 +19,7 @@ public class App_KVClient extends Thread {
 
 	public static Logger logger = Logger.getRootLogger();
 	private KVClient client;
+	private ClientSubscriptionServer subscriptionServer;
 
 	boolean running;
 	boolean connected;
@@ -252,7 +253,7 @@ public class App_KVClient extends Thread {
     
     }
     
-    public void subscribeDeleteMessage(String[] commands){
+    public void unsubscribeMessage(String[] commands){
     	
 	if (commands.length != 2) {
 	  System.out.println("Invalid Number of Arguments");
