@@ -306,22 +306,25 @@ public class KVServer extends Thread implements IKVServer {
 	ObjectOutputStream oos = new ObjectOutputStream(output);
 
 	for (File file: partitionedFiles) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_KV, this.serverFileManager.fileTofileContentsMatrix(file));
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_KV, this.serverFileManager.fileTofileContentsMatrix(file), null);
 	}
 
 	File[] replica1Files = this.serverFileManager.filterFilesByPrefix("Replica1KVServerStoreFile_");
 
 	for (File file: replica1Files) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_1, this.serverFileManager.fileTofileContentsMatrix(file));
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_1, this.serverFileManager.fileTofileContentsMatrix(file), null);
 	}
 
 	File[] replica2Files = this.serverFileManager.filterFilesByPrefix("Replica2KVServerStoreFile_");
 
 	for (File file: replica2Files) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_2, this.serverFileManager.fileTofileContentsMatrix(file));
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_REPLICA_KV_2, this.serverFileManager.fileTofileContentsMatrix(file), null);
 	}
 
-	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SERVER_INIT_FIN, null);
+	var newSubscriptions = this.partitionSubscriptionsForNewServer(address, port);
+	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SEND_SUBSCRIPTIONS, null, newSubscriptions);
+
+	ServerConnection.sendMessage(oos, ServerMessage.StatusType.SERVER_INIT_FIN, null, null);
 
 	serverSocket.shutdownOutput();
 	serverSocket.close();
@@ -350,18 +353,43 @@ public class KVServer extends Thread implements IKVServer {
 
 	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
 	    for (File file: storeFiles) {
-		ServerConnection.sendMessage(oos, status, this.serverFileManager.fileTofileContentsMatrix(file));
+		ServerConnection.sendMessage(oos, status, this.serverFileManager.fileTofileContentsMatrix(file), null);
 	    }
 	}
 
 	if (status == ServerMessage.StatusType.REPLICATE_KV_1) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null);
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null, null);
 	} else {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null);
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null, null);
 	}
 	
 	serverSocket.shutdownOutput();
 	serverSocket.close();
+
+    }
+
+    public TreeMap<String, List<ClientSubscriptionInfo>> partitionSubscriptionsForNewServer(String address, int port) {
+
+	var filteredSubscriptions = new TreeMap<String, List<ClientSubscriptionInfo>>();
+
+	var serverRingPosition = this.hashIP(this.getHostname(), this.getPort());
+	var serverKeyRange = this.metadata.get(serverRingPosition);
+
+	synchronized (this.subs) {
+	    var subscriptionIterator = this.subs.entrySet().iterator();
+	    while (subscriptionIterator.hasNext()) {
+
+		var subscriptionEntry = subscriptionIterator.next();
+		var keyPosition = this.hashKey(subscriptionEntry.getKey());	
+
+		if (!serverKeyRange.withinKeyRange(keyPosition)) {
+		    filteredSubscriptions.put(subscriptionEntry.getKey(), subscriptionEntry.getValue());
+		    subscriptionIterator.remove();
+		}
+	    }
+	}
+
+	return filteredSubscriptions;	
 
     }
 
@@ -539,6 +567,10 @@ public class KVServer extends Thread implements IKVServer {
 	this.state = state;
     }
 
+    public void setSubscriptions(TreeMap<String, List<ClientSubscriptionInfo>> subscriptions) {
+	this.subs = subscriptions;
+    }
+
     public TreeMap<byte[], KeyRange> getMetadata() {
 	return this.metadata;
     }
@@ -684,6 +716,17 @@ public class KVServer extends Thread implements IKVServer {
     private byte[] hashIP(String address, int port) {
 	try {
 	    String valueToHash = address + ":" + Integer.toString(port);	
+	    MessageDigest md = MessageDigest.getInstance("MD5");
+	    md.update(valueToHash.getBytes());
+	    return md.digest();
+	} catch (Exception e) {
+	    throw new RuntimeException("Error: Impossible NoSuchAlgorithmError!");
+	}
+    }
+
+    private byte[] hashKey(String key) {
+	try {
+	    String valueToHash = key;
 	    MessageDigest md = MessageDigest.getInstance("MD5");
 	    md.update(valueToHash.getBytes());
 	    return md.digest();

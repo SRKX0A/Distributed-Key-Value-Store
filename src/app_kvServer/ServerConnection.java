@@ -2,11 +2,13 @@ package app_kvServer;
 
 import java.io.*;
 import java.net.*;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
 import shared.messages.ServerMessage;
 import shared.messages.ServerMessage.StatusType;
+import client.ClientSubscriptionInfo;
 
 public class ServerConnection extends Thread {
 
@@ -40,6 +42,8 @@ public class ServerConnection extends Thread {
 		    this.handleReplicaKVMessage(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_1 || request.getStatus() == StatusType.REPLICATE_KV_2) {
 		    this.handleReplicateRequestMessage(request);
+		} else if (request.getStatus() == StatusType.SEND_SUBSCRIPTIONS) {
+		    this.handleSendSubscriptionsMessage(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_1_FIN || request.getStatus() == StatusType.REPLICATE_KV_2_FIN) {
 		    this.handleReplicateKVFinMessage(request);
 		    return;
@@ -94,6 +98,10 @@ public class ServerConnection extends Thread {
 	this.kvServer.getServerFileManager().clearOldReplicatedStoreFiles(request.getStatus());
     }
 
+    public void handleSendSubscriptionsMessage(ServerMessage request) {
+	this.kvServer.setSubscriptions(request.getSubscriptions());
+    }
+
     public void handleServerInitFinMessage() {
 	this.kvServer.getECSConnection().initializationFinished();
     }
@@ -114,9 +122,9 @@ public class ServerConnection extends Thread {
 	}
     }
 
-    public static void sendMessage(ObjectOutputStream output, StatusType status, byte[][] fileContents) throws Exception {
+    public static void sendMessage(ObjectOutputStream output, StatusType status, byte[][] fileContents, TreeMap<String, List<ClientSubscriptionInfo>> subscriptions) throws Exception {
 
-	ServerMessage response = new ServerMessage(status, fileContents);
+	ServerMessage response = new ServerMessage(status, fileContents, subscriptions);
 
 	output.writeObject(response);
 	output.flush();
