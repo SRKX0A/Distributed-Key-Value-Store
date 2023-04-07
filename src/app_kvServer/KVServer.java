@@ -10,6 +10,7 @@ import org.apache.log4j.Logger;
 import app_kvServer.util.ServerFileManager;
 
 import client.ProtocolMessage;
+import client.ClientSubscriptionInfo;
 import shared.KeyRange;
 import shared.ByteArrayComparator;
 import shared.messages.ServerMessage;
@@ -575,15 +576,16 @@ public class KVServer extends Thread implements IKVServer {
 	logger.info("Client " + clientInfo.toString() + " requests to subscribe to key = " + key);
 		
 	if (!this.subs.containsKey(key)) {
-	    var cl = new ArrayList<ClientSubscriptionInfo>(clientInfo);
 	    synchronized (this.subs) {
+		var cl = new ArrayList<ClientSubscriptionInfo>();
+		cl.add(clientInfo);
 		subs.put(key, cl);
 	    }
 	    logger.info("New key " + key + " added to subscription list with client " + clientInfo.toString());
 	    return true;
 	} 
     	
-	var clientList = sub.get(key);
+	var clientList = this.subs.get(key);
 
 	if (clientList.contains(clientInfo)) {
 	    logger.debug("Client has already subscribed to key = " + key);
@@ -615,7 +617,7 @@ public class KVServer extends Thread implements IKVServer {
 	}
 	
 	synchronized (this.subs) {
-	    if (!this.subs.get(key).remove(client)) {
+	    if (!this.subs.get(key).remove(clientInfo)) {
 		logger.warn("Client " + clientInfo.toString() + " is not subsribed to key = " + key);
 		return false;
 	    }
@@ -628,7 +630,7 @@ public class KVServer extends Thread implements IKVServer {
 
     private void notifyClients(String key, String value) {
     
-	if (!this.subs.contains(key)) {
+	if (!this.subs.containsKey(key)) {
 	    return;
 	}
 	

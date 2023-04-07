@@ -189,7 +189,9 @@ public class KVStore implements KVCommInterface {
 	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 
-	String subscribeMessage = "subscribe " + key + " " + address + " " + port + "\r\n";
+	String value = address + ":" + Integer.toString(port);
+
+	String subscribeMessage = "subscribe " + key + " " + value + "\r\n";
 	output.write(subscribeMessage.getBytes());
 	output.flush();
 	
@@ -208,7 +210,9 @@ public class KVStore implements KVCommInterface {
   	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 
-	String unsubscribeMessage = "unsubscribe " + key + " " + address + " " + port + "\r\n";
+	String value = address + ":" + Integer.toString(port);
+
+	String unsubscribeMessage = "unsubscribe " + key + " " + value + "\r\n";
 	output.write(unsubscribeMessage.getBytes());
 	output.flush();
 	

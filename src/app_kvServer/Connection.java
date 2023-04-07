@@ -63,9 +63,9 @@ public class Connection extends Thread {
 		} else if (request.getStatus() == StatusType.KEYRANGE_READ) {
 		    this.handleKeyrangereadRequest(request);
 		} else if (request.getStatus() == StatusType.SUBSCRIBE) {
-		    this.handleSubscribeMessage();
+		    this.handleSubscribeMessage(request);
 		} else if (request.getStatus() == StatusType.UNSUBSCRIBE) {
-		    this.handleRemoveSubscribeMessage();
+		    this.handleUnsubscribeMessage(request);
 		} else if (request.getStatus() == StatusType.SERVER_INIT) {
 		    this.handleServerInitMessage();
 		    return;
@@ -153,23 +153,30 @@ public class Connection extends Thread {
 	}
     }
 
-    public void handleSubscribeMessage(KVMessage request) throws Exception{
+    public void handleSubscribeMessage(KVMessage request) throws Exception {
+
+	String[] addressAndPort = request.getValue().split(":");
+	String address = addressAndPort[0];
+	int port = Integer.parseInt(addressAndPort[1]);
     
-	if(this.kvServer.addSub(request.getKey(),request.getValue()).equals("null")){
-		sendMessage(this.output.StatusType.SUB_ERROR,request.getKey(),"null");	
-	}
-	else{
-		sendMessage(this.output.StatusType.SUB_SUCCESS, request.getKey(),"null");
+	if (this.kvServer.subscribeClient(address, port, request.getKey())) {
+	    sendMessage(this.output, StatusType.SUBSCRIBE_SUCCESS, null, null);
+	} else {
+	    sendMessage(this.output, StatusType.SUBSCRIBE_ERROR, null, null);	
 	}
 	    
     }
 	
-    public void handleRemoveSubscribeMessage(KVMessage request) throws Exception{
-    	if(this.kvServer.removeSub(request.getKey(),request.getValue()).equals("null")){
-		sendMessage(this.output.StatusType.REMOVE_SUB_ERROR,request.getKey(),"null");
-	}
-	else{
-		sendMessage(this.output.StatusType.REMOVE_SUB_SUCCESS, request.getKey(),"null");
+    public void handleUnsubscribeMessage(KVMessage request) throws Exception{
+
+	String[] addressAndPort = request.getValue().split(":");
+	String address = addressAndPort[0];
+	int port = Integer.parseInt(addressAndPort[1]);
+
+    	if (this.kvServer.unsubscribeClient(address, port, request.getKey())) {
+	    sendMessage(this.output, StatusType.UNSUBSCRIBE_SUCCESS, null, null);
+	} else {
+	    sendMessage(this.output, StatusType.UNSUBSCRIBE_ERROR, null, null);	
 	}
     
     }

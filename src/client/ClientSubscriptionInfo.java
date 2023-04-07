@@ -5,7 +5,7 @@ public class ClientSubscriptionInfo {
     private String address;
     private int port;
 
-    public Subscribe(String address, int port) {
+    public ClientSubscriptionInfo(String address, int port) {
 	this.address = address;
 	this.port = port;
     }
