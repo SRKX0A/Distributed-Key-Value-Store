@@ -155,6 +155,11 @@ public class Connection extends Thread {
 
     public void handleSubscribeMessage(KVMessage request) throws Exception {
 
+	if (!this.isServerResponsibleForGetKey(request.getKey())) {
+	    sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, null, null);
+	    return;
+	}
+
 	String[] addressAndPort = request.getValue().split(":");
 	String address = addressAndPort[0];
 	int port = Integer.parseInt(addressAndPort[1]);
@@ -167,7 +172,12 @@ public class Connection extends Thread {
 	    
     }
 	
-    public void handleUnsubscribeMessage(KVMessage request) throws Exception{
+    public void handleUnsubscribeMessage(KVMessage request) throws Exception {
+
+	if (!this.isServerResponsibleForGetKey(request.getKey())) {
+	    sendMessage(this.output, StatusType.SERVER_NOT_RESPONSIBLE, null, null);
+	    return;
+	}
 
 	String[] addressAndPort = request.getValue().split(":");
 	String address = addressAndPort[0];

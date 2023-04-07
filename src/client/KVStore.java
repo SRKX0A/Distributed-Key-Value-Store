@@ -200,6 +200,13 @@ public class KVStore implements KVCommInterface {
 	ProtocolMessage subscribeReply = this.receiveMessage(input);
 	
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", subscribeReply.getStatus(), subscribeReply.getKey(), subscribeReply.getValue()));
+
+	if (subscribeReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
+	    ProtocolMessage keyRangeReply = this.keyrange();
+	    this.metadata = this.parseKeyRangeMessage(keyRangeReply);
+	    this.socket = this.identifySocketByKey(key);
+	    return this.subscribe(key, address, port);
+	}
 	
 	return subscribeReply;
 
@@ -221,6 +228,13 @@ public class KVStore implements KVCommInterface {
 	ProtocolMessage unsubscribeReply = this.receiveMessage(input);
 	
 	logger.info(String.format("Received protocol message: status = %s, key = %s, value = %s", unsubscribeReply.getStatus(), unsubscribeReply.getKey(), unsubscribeReply.getValue()));
+
+	if (unsubscribeReply.getStatus() == KVMessage.StatusType.SERVER_NOT_RESPONSIBLE) {
+	    ProtocolMessage keyRangeReply = this.keyrange();
+	    this.metadata = this.parseKeyRangeMessage(keyRangeReply);
+	    this.socket = this.identifySocketByKey(key);
+	    return this.unsubscribe(key, address, port);
+	}
 	
 	return unsubscribeReply;
  
