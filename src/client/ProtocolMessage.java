@@ -48,6 +48,12 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    case "get":
 		protocolStatus = KVMessage.StatusType.GET;
 		break;
+	    case "subscribe":
+		protocolStatus = KVMessage.StatusType.SUBSCRIBE;
+		break;
+	    case "unsubscribe":
+		protocolStatus = KVMessage.StatusType.UNSUBSCRIBE;
+		break;
 	    case "server_init":
 		protocolStatus = KVMessage.StatusType.SERVER_INIT;
 		break;
@@ -59,12 +65,6 @@ public class ProtocolMessage implements Serializable, KVMessage {
 		break;
 	    case "replicate_kv_handshake_nack":
 		protocolStatus = KVMessage.StatusType.REPLICATE_KV_HANDSHAKE_NACK;
-		break;
-	    case "sub_init":
-		protocolStatus = KVMessage.StatusType.SUB_INIT;
-		break;
-	    case "unsub":
-		protocolStatus = KVMessage.StatusType.UNSUB;
 		break;
 	    default:
 		throw new IllegalArgumentException("Error: Request type must be either PUT or GET");
@@ -109,6 +109,19 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 
+	} else if (protocolStatus == KVMessage.StatusType.SUBSCRIBE || protocolStatus == KVMessage.StatusType.UNSUBSCRIBE) {
+	    
+	    String key = msgString.substring(indexOfFirstSpace + 1);
+
+	    if (key.getBytes().length > 20) {
+		throw new IllegalArgumentException("Error: Key must be less than or equal to 20 bytes");
+	    } else if (!key.endsWith("\r\n")) {
+	    	throw new IllegalArgumentException("Error: Malformed message");
+	    }
+
+	    protocolKey = key.substring(0, key.length() - 2);
+	    protocolValue = "null";
+	
 	} else if (protocolStatus == KVMessage.StatusType.REPLICATE_KV_HANDSHAKE) {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);
@@ -120,26 +133,6 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = key.substring(0, key.length() - 2);
 	    protocolValue = "null";
 	
-	} else if(protocolStatus == KVMessage.StatusType.SUB_INIT){
-	    
-	    String key = msgString.substring(indexOfFirstSpace+1);
-
-	    if(!key.endsWith("\r\n")){
-	    	throw new IllegalArgumentException("Error: Malformed message");
-	    }
-
-	    protocolKey = key.substring(0,key.length()-2);
-	    protocolValue = "null";
-	
-	} else if(protocolStatus == KVMessage.StatusType.UNSUB){
-	    
-	    String key = msgString.substring(indexOfFirstSpace + 1);
-	    if(!key.endsWith("\r\n")){
-	    	throw new IllegalArgumentException("Error: Malformed message");
-	    }
-
-	    protocolKey = key.substring(0,key.length() - 2);
-	    protocolValue = "null";
 	}
 
 	return new ProtocolMessage(protocolStatus, protocolKey, protocolValue);
@@ -179,13 +172,15 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolStatus = StatusType.KEYRANGE_READ_SUCCESS;
 	} else if (status.toLowerCase().equals("server_not_responsible")) {
 	    protocolStatus = StatusType.SERVER_NOT_RESPONSIBLE;
-	} else if (status.toLowerCase().equals("sub_init_success")){
-	    protocolStatus = StatusType.SUB_INIT_SUCCESS;
-    	} else if (status.toLowerCase().equals("unsub_success")){
-	    protocolStatus = StatusType.UNSUB_SUCCESS;
-	}else if (status.toLowerCase().equals("sub_error")){
-	    protocolStatus = StatusType.SUB_ERROR;
-	}else {
+	} else if (status.toLowerCase().equals("subscribe_success")) {
+	    protocolStatus = StatusType.SUBSCRIBE_SUCCESS;
+	} else if (status.toLowerCase().equals("subscribe_error")) {
+	    protocolStatus = StatusType.SUBSCRIBE_ERROR;
+    	} else if (status.toLowerCase().equals("unsubscribe_success")) {
+	    protocolStatus = StatusType.UNSUBSCRIBE_SUCCESS;
+    	} else if (status.toLowerCase().equals("unsubscribe_error")) {
+	    protocolStatus = StatusType.UNSUBSCRIBE_ERROR;
+	} else {
 	    throw new IllegalArgumentException("Error: Malformed StatusType response from server");
 	}
 
@@ -242,16 +237,16 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	    protocolKey = "null";
 	    protocolValue = "null";
 
-	} else if (protocolStatus == StatusType.SUB_SUCCESS || protocolStatus == StatusType.UNSUB_SUCCESS || protocolStatus == StatusType.SUB_ERROR){
+	} else if (protocolStatus == StatusType.SUBSCRIBE_SUCCESS || protocolStatus == StatusType.UNSUBSCRIBE_SUCCESS || protocolStatus == StatusType.SUBSCRIBE_ERROR || protocolStatus == StatusType.UNSUBSCRIBE_ERROR) {
 	   
 	   if (!msgString.endsWith("\r\n")){
 	   	throw new IllegalArgumentException("Error: Malformed message from server");
 	   }
 
-	   protocolKey = key.substring(0,key.length()-2);
+	   protocolKey = key.substring(0, key.length() - 2);
 	   protocolValue = "null";
 
-	}else {
+	} else {
 
 	    String key = msgString.substring(indexOfFirstSpace + 1);
 
