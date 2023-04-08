@@ -19,6 +19,7 @@ public class ServerMessage implements Serializable {
 	REPLICATE_KV_1_FIN,
 	REPLICATE_KV_2_FIN,
 	SEND_SUBSCRIPTIONS,
+	REPLICATE_SUBSCRIPTIONS, 
     }
 
     public ServerMessage(StatusType status, byte[][] fileContents, TreeMap<String, List<ClientSubscriptionInfo>> subscriptions) {

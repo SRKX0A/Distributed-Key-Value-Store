@@ -44,6 +44,8 @@ public class ServerConnection extends Thread {
 		    this.handleReplicateRequestMessage(request);
 		} else if (request.getStatus() == StatusType.SEND_SUBSCRIPTIONS) {
 		    this.handleSendSubscriptionsMessage(request);
+		} else if (request.getStatus() == StatusType.REPLICATE_SUBSCRIPTIONS) {
+		    this.handleReplicateSubscriptionsMessage(request);
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_1_FIN || request.getStatus() == StatusType.REPLICATE_KV_2_FIN) {
 		    this.handleReplicateKVFinMessage(request);
 		    return;
@@ -100,6 +102,10 @@ public class ServerConnection extends Thread {
 
     public void handleSendSubscriptionsMessage(ServerMessage request) {
 	this.kvServer.setSubscriptions(request.getSubscriptions());
+    }
+
+    public void handleReplicateSubscriptionsMessage(ServerMessage request) {
+	this.kvServer.setSubscriptionsReplica(request.getSubscriptions());
     }
 
     public void handleServerInitFinMessage() {

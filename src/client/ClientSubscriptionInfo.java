@@ -1,6 +1,8 @@
 package client;
 
-public class ClientSubscriptionInfo {
+import java.io.*;
+
+public class ClientSubscriptionInfo implements Serializable {
 	
     private String address;
     private int port;

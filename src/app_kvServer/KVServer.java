@@ -52,6 +52,7 @@ public class KVServer extends Thread implements IKVServer {
     private volatile boolean online;
 	
     private TreeMap<String, List<ClientSubscriptionInfo>> subs;
+    private TreeMap<String, List<ClientSubscriptionInfo>> subsReplica;
 
     /**
     * Start KV Server at given port
@@ -144,6 +145,10 @@ public class KVServer extends Thread implements IKVServer {
 	return !result.equals("null");
     }
 
+    public String getValueFromStorage(String key) throws Exception {
+	return this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
+    }
+
     @Override
     public boolean inCache(String key) {
         return this.memtable.containsKey(key);
@@ -207,13 +212,23 @@ public class KVServer extends Thread implements IKVServer {
 	String previousValue;
 
 	synchronized (this.memtableLock) {
-	    boolean presentInCache = this.inCache(key);
+
 	    previousValue = this.memtable.put(key, value);
+
+	    if (previousValue != null && !previousValue.equals("null")) {
+		response = StatusType.PUT_UPDATE;
+	    }
+
+	    if (response != StatusType.PUT_UPDATE) {
+		previousValue = this.getValueFromStorage(key);
+
+		if (previousValue != null && !previousValue.equals("null")) {
+		    response = StatusType.PUT_UPDATE;
+		}
+	    }
 
 	    if (value.equals("null")) {
 		response = StatusType.PUT_SUCCESS;
-	    } else if ((previousValue != null && !previousValue.equals("null")) || (!presentInCache && this.inStorage(key))) {
-		response = StatusType.PUT_UPDATE;
 	    }
 
 	    if (this.memtable.size() >= this.cacheSize) {
@@ -333,41 +348,6 @@ public class KVServer extends Thread implements IKVServer {
 
     }
 
-    public void sendFilesToReplicaServer(ServerMessage.StatusType status, String address, int port) throws Exception {
-
-	logger.info(String.format("Sending files to replica server <%s,%d>", address, port));
-	
-	Socket serverSocket = new Socket(address, port);
-	InputStream input = serverSocket.getInputStream();
-	OutputStream output = serverSocket.getOutputStream();
-
-	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE, this.getKeyRangeSuccessString(), null);
-	output.write(initialMessage.getBytes());
-	output.flush();
-
-	File[] storeFiles = this.serverFileManager.filterFilesByPrefix("KVServerStoreFile_");
-
-	ObjectOutputStream oos = new ObjectOutputStream(output);
-
-	ProtocolMessage reply = Connection.receiveMessage(input);
-
-	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
-	    for (File file: storeFiles) {
-		ServerConnection.sendMessage(oos, status, this.serverFileManager.fileTofileContentsMatrix(file), null);
-	    }
-	}
-
-	if (status == ServerMessage.StatusType.REPLICATE_KV_1) {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null, null);
-	} else {
-	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null, null);
-	}
-	
-	serverSocket.shutdownOutput();
-	serverSocket.close();
-
-    }
-
     public TreeMap<String, List<ClientSubscriptionInfo>> partitionSubscriptionsForNewServer(String address, int port) {
 
 	var filteredSubscriptions = new TreeMap<String, List<ClientSubscriptionInfo>>();
@@ -390,6 +370,45 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	return filteredSubscriptions;	
+
+    }
+
+    public void sendFilesToReplicaServer(ServerMessage.StatusType status, String address, int port) throws Exception {
+
+	logger.info(String.format("Sending files to replica server <%s,%d>", address, port));
+	
+	Socket serverSocket = new Socket(address, port);
+	InputStream input = serverSocket.getInputStream();
+	OutputStream output = serverSocket.getOutputStream();
+
+	ProtocolMessage initialMessage = new ProtocolMessage(StatusType.REPLICATE_KV_HANDSHAKE, this.getKeyRangeSuccessString(), null);
+	output.write(initialMessage.getBytes());
+	output.flush();
+
+	File[] storeFiles = this.serverFileManager.filterFilesByPrefix("KVServerStoreFile_");
+
+	ObjectOutputStream oos = new ObjectOutputStream(output);
+
+	ProtocolMessage reply = Connection.receiveMessage(input);
+
+	if (reply.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE_ACK) {
+
+	    for (File file: storeFiles) {
+		ServerConnection.sendMessage(oos, status, this.serverFileManager.fileTofileContentsMatrix(file), null);
+	    }
+
+	    ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_SUBSCRIPTIONS, null, new TreeMap<String, List<ClientSubscriptionInfo>>(this.subs));
+
+	    if (status == ServerMessage.StatusType.REPLICATE_KV_1) {
+		ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_1_FIN, null, null);
+	    } else {
+		ServerConnection.sendMessage(oos, ServerMessage.StatusType.REPLICATE_KV_2_FIN, null, null);
+	    }
+	
+	}
+
+	serverSocket.shutdownOutput();
+	serverSocket.close();
 
     }
 
@@ -471,6 +490,22 @@ public class KVServer extends Thread implements IKVServer {
 	}
 
 	this.serverFileManager.recover(address, port, updatedMetadata, serverRingPosition);
+
+	var serverKeyRange = this.metadata.get(serverRingPosition);
+
+	synchronized (this.subs) {
+	    var subscriptionIterator = this.subsReplica.entrySet().iterator();
+	    while (subscriptionIterator.hasNext()) {
+
+		var subscriptionEntry = subscriptionIterator.next();
+		var keyPosition = this.hashKey(subscriptionEntry.getKey());	
+
+		if (!serverKeyRange.withinKeyRange(keyPosition)) {
+		    this.subs.put(subscriptionEntry.getKey(), subscriptionEntry.getValue());
+		    subscriptionIterator.remove();
+		}
+	    }
+	}
 
     }
 
@@ -601,6 +636,10 @@ public class KVServer extends Thread implements IKVServer {
 
     public ServerFileManager getServerFileManager() {
 	return this.serverFileManager;
+    }
+
+    public void setSubscriptionsReplica(TreeMap<String, List<ClientSubscriptionInfo>> subscriptions) {
+	this.subsReplica = subscriptions;
     }
 	
     public boolean subscribeClient(String clientAddress, int clientPort, String key) {
