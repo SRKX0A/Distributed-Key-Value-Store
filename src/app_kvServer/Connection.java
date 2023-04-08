@@ -72,8 +72,6 @@ public class Connection extends Thread {
 		} else if (request.getStatus() == StatusType.REPLICATE_KV_HANDSHAKE) {
 		    this.handleReplicateKVHandshakeMessage(request);
 		    return;
-		} else if (request.getStatus() == StatusType.GET_SUB) {
-	     	    this.handleSubList();
 		} else {
 		    this.handleInvalidMessageRequestType();
 		}
@@ -215,16 +213,6 @@ public class Connection extends Thread {
 
     }
 	
-
-    public void handleSubList() throws Exception {
-    	try{
-    		logger.info("Get subscription list");
-		sendMessage(this.output, StatusType.GET_SUB_SUCCESS, this.kvServer.getSubs(), null);
-	} catch (Exception e){
-		logger.error("Error: " + e.toString());
-	}
-    }
-
     public void handleInvalidMessageRequestType() throws Exception {
 	logger.error("Client message format failure: Invalid request status.");
 	sendMessage(this.output, StatusType.FAILED, "Error: Message request must be either PUT or GET.", "Error: Message request must be either PUT or GET.");
