@@ -186,6 +186,8 @@ public class KVStore implements KVCommInterface {
 	
     public KVMessage subscribe(String key, String address, int port) throws Exception {
     	
+	this.socket = identifySocketByKey(key);
+
 	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 
@@ -213,7 +215,9 @@ public class KVStore implements KVCommInterface {
     }
 
     public KVMessage unsubscribe(String key, String address, int port) throws Exception {
-    
+    	
+	this.socket = identifySocketByKey(key);
+
   	OutputStream output = this.socket.getOutputStream();
 	InputStream input = this.socket.getInputStream();
 

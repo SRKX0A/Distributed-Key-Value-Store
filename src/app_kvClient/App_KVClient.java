@@ -127,6 +127,8 @@ public class App_KVClient extends Thread {
 		System.out.println("To Get KV Pair ->  get <key>");
 		System.out.println("To Get keyrange message -> keyrange");
 		System.out.println("To Get keyrange_read message -> keyrange_read");
+		System.out.println("To Subscribe -> subscribe <key>");
+		System.out.println("To Unsubscribe -> unsubscribe <key>");
 		System.out.println("To Change LogLevel -> logLevel <level>");
 		System.out.println("To Quit -> quit");
 		System.out.println("For Help -> help");
@@ -247,6 +249,7 @@ public class App_KVClient extends Thread {
     
 	if (commands.length != 2) {
 	    System.out.println("Invalid Number of Arguments");
+	    return;
 	}
 
 	try {

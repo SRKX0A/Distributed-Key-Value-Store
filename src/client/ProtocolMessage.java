@@ -32,7 +32,7 @@ public class ProtocolMessage implements Serializable, KVMessage {
 	} else if (msgString.equals("keyrange_read\r\n")) {
 	    return new ProtocolMessage(StatusType.KEYRANGE_READ, null, null);
 	}
-
+	
 	int indexOfFirstSpace = msgString.indexOf(" ");
 
 	if (indexOfFirstSpace == -1) {
