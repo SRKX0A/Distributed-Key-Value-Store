@@ -16,7 +16,7 @@ import shared.ByteArrayComparator;
 import shared.messages.ServerMessage;
 import shared.messages.ECSMessage;
 import shared.messages.KVMessage.StatusType;
-
+import shared.messages.SubscriptionMessage;
 
 public class KVServer extends Thread implements IKVServer {
 
@@ -204,10 +204,11 @@ public class KVServer extends Thread implements IKVServer {
 	this.serverFileManager.writeKVToWAL(key, value);
 
         StatusType response = StatusType.PUT_SUCCESS;
+	String previousValue;
 
 	synchronized (this.memtableLock) {
 	    boolean presentInCache = this.inCache(key);
-	    String previousValue = this.memtable.put(key, value);
+	    previousValue = this.memtable.put(key, value);
 
 	    if (value.equals("null")) {
 		response = StatusType.PUT_SUCCESS;
@@ -225,8 +226,9 @@ public class KVServer extends Thread implements IKVServer {
 		}
 	    }
 	}
+	
+	this.notifyClients(key, value, previousValue);
 
-	this.notifyClients(key, value);
 	return response;
 
     }
@@ -627,48 +629,71 @@ public class KVServer extends Thread implements IKVServer {
 	
 	return true;
     }
+	
 
-    private void notifyClients(String key, String value) {
+    private static void sendNotification(ObjectOutputStream output, String key, String value, String oldValue){
+    
+   	     
+	    SubscriptionMessage notify = new SubscriptionMessage(SubscriptionMessage.StatusType.KV_NOTIFICATION, key, value, oldValue);
+    	    
+	    try{	
+	    	output.writeObject(notify);
+	    	output.flush();
+	    } catch(Exception e){
+		
+		logger.error("Error: "+e.toString());
+		    
+	
+	    }
+
+	    logger.debug(String.format("Server sent a notification to client with status = %s",notify.getStatus()));
+
+	    return;
+    }
+
+    private void notifyClients(String key, String value, String oldValue) {
     
 	if (!this.subs.containsKey(key)) {
 	    return;
 	}
 	
-	logger.info("Notifying subscribers that key = " + key + " now has value = " + value);
+	logger.info("Notifying subscribers that key = " + key + " had old value = " + oldValue +" now has value = " + value);
 	
-	/*
 	try {
 	    synchronized(this.subs){
 		for(var entry: subs.entrySet()){
 
-		    List<String> clients = entry.getValue();
+		    List<ClientSubscriptionInfo> clients = entry.getValue();
 
 		    for(var cli : clients){
+			
+			String addr = cli.getAddress();
+			int port = cli.getPort();
 
-			String[] split = cli.split();
+			Socket serverSocket = new Socket(addr,port);
 
-			var addr = split[0];
-			var port = split[1];
+			ObjectOutputStream output = new ObjectOutputStream(serverSocket.getOutputStream());
+			
+			sendNotification(output,key,value,oldValue);
 
-			Socket serverSocket = new Socket(addr,Integer.parseInt(port));
-
-			OutputStream output = serverSocket.getOutputStream();
-
-			StatusType status = StatusType.SUB_UPDATE;
-
+			/*
 			if(value.equals("null")){
-			    status = StatusType.UNSUB;
+			    status = StatusType.UNSUBSRIBE;
 			}
+			*/
 
+			/*
 			ProtocolMessage notifyMessage = new ProtocolMessage(status,key,value);
 
-			logger.info("Notified client = "+client+" with key = "+key+" with status = "+notifyMessage.getStatus());
+			logger.info("Notified client = "+ client +" with key = " +key +" with status = " + notifyMessage.getStatus());
 
-			output.write(initialMessage.getBytes());
+			output.write(notifyMessage.getBytes());
 			output.flush();
+			*/
+			
 
-			socket.shutdownOutput();
-			socket.close();
+			serverSocket.shutdownOutput();
+			serverSocket.close();
 		    }
 
 
@@ -679,7 +704,7 @@ public class KVServer extends Thread implements IKVServer {
 	    logger.error("Error: "+ e.toString());
 	    System.out.println("Error: "+ e.toString());
 	}
-	*/
+	
     
     }
 
