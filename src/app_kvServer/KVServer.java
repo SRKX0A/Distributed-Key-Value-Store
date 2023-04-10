@@ -162,7 +162,21 @@ public class KVServer extends Thread implements IKVServer {
             return this.memtable.get(key);
         }
 
-	String value = this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
+	String value = this.serverFileManager.searchForKeyInFiles(key, "Replica1KVServerStoreFile_");
+
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from replica 1 storage with value = " + value);
+	    return value;
+	}
+
+	value = this.serverFileManager.searchForKeyInFiles(key, "Replica2KVServerStoreFile_");
+
+	if (!value.equals("null")) {
+	    logger.info("Got key = " + key + " from replica 2 storage with value = " + value);
+	    return value;
+	}
+
+	value = this.serverFileManager.searchForKeyInFiles(key, "KVServerStoreFile_");
 
 	if (!value.equals("null")) {
 	    logger.info("Got key = " + key + " from storage with value = " + value);
@@ -182,20 +196,6 @@ public class KVServer extends Thread implements IKVServer {
 		}
 	    }
 
-	    return value;
-	}
-
-	value = this.serverFileManager.searchForKeyInFiles(key, "Replica1KVServerStoreFile_");
-
-	if (!value.equals("null")) {
-	    logger.info("Got key = " + key + " from replica 1 storage with value = " + value);
-	    return value;
-	}
-
-	value = this.serverFileManager.searchForKeyInFiles(key, "Replica2KVServerStoreFile_");
-
-	if (!value.equals("null")) {
-	    logger.info("Got key = " + key + " from replica 2 storage with value = " + value);
 	    return value;
 	}
 
